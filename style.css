@@ -276,17 +276,24 @@ input[type=color] {
 /* ── キャンバスエリア ── */
 .canvas-area {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   overflow: auto;
   background: var(--bg);
   position: relative;
 }
 
+.canvas-scroll-pad {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 100%;
+  min-height: 100%;
+  padding: 40vh 30vw;
+}
+
 #canvas-wrap {
   position: relative;
   display: inline-block;
+  flex-shrink: 0;
   box-shadow: 0 2px 16px rgba(0,0,0,0.10);
 }
 
