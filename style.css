@@ -73,21 +73,76 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 /* ── 左パネル ── */
 .panel {
   width: var(--panel);
+  min-width: 0;
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: none;
+  transition: width 0.25s ease, min-width 0.25s ease, padding 0.25s ease, border 0.25s ease;
 }
 .panel::-webkit-scrollbar {
   display: none;
+}
+.panel.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  border-right: none;
+  overflow: hidden;
+}
+
+/* リサイズハンドル */
+.panel-resize {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  position: relative;
+  z-index: 5;
+}
+.panel-resize:hover,
+.panel-resize.dragging {
+  background: var(--accent);
+}
+.panel.collapsed ~ .panel-resize {
+  display: none;
+}
+
+/* パネル開閉ボタン */
+.panel-toggle {
+  position: absolute;
+  left: var(--panel);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  width: 20px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-left: none;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: left 0.25s ease, background 0.1s;
+}
+.panel-toggle:hover {
+  background: var(--bg);
+  color: var(--text);
 }
 .panel-section {
   padding: 14px 16px;
@@ -315,3 +370,18 @@ input[type=color] {
 }
 .start-card p { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
 .start-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: center; }
+
+/* ── レスポンシブ ── */
+@media (max-width: 768px) {
+  :root { --panel: 220px; }
+  header h1 { font-size: 13px; }
+  header { gap: 6px; padding: 0 10px; }
+  .statusbar { gap: 10px; padding: 0 8px; }
+}
+@media (max-width: 480px) {
+  :root { --panel: 180px; }
+  header { height: 38px; }
+  header h1 { font-size: 12px; }
+  .panel-section { padding: 10px 12px; }
+  .palette-grid { grid-template-columns: repeat(6, 1fr); }
+}

@@ -481,8 +481,65 @@ document.getElementById('btn-load-img').addEventListener('click', () => {
   fileInput.click();
 });
 
+// ── パネルリサイズ ────────────────────────────────────
+const panel = document.getElementById('panel');
+const panelResize = document.getElementById('panel-resize');
+const panelToggle = document.getElementById('panel-toggle');
+let panelCollapsed = false;
+let savedPanelWidth = 260;
+
+function updateTogglePosition() {
+  const w = panelCollapsed ? 0 : panel.offsetWidth;
+  panelToggle.style.left = (w + (panelCollapsed ? 0 : 4)) + 'px';
+  panelToggle.textContent = panelCollapsed ? '▶' : '◀';
+}
+
+panelToggle.addEventListener('click', () => {
+  panelCollapsed = !panelCollapsed;
+  if (panelCollapsed) {
+    savedPanelWidth = panel.offsetWidth;
+    panel.classList.add('collapsed');
+  } else {
+    panel.classList.remove('collapsed');
+    panel.style.width = savedPanelWidth + 'px';
+  }
+  updateTogglePosition();
+});
+
+panel.addEventListener('transitionend', () => {
+  updateTogglePosition();
+});
+
+let isResizing = false;
+panelResize.addEventListener('mousedown', e => {
+  e.preventDefault();
+  isResizing = true;
+  panelResize.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+});
+
+document.addEventListener('mousemove', e => {
+  if (!isResizing) return;
+  const appRect = document.querySelector('.app').getBoundingClientRect();
+  let newWidth = e.clientX - appRect.left;
+  newWidth = Math.max(160, Math.min(newWidth, window.innerWidth * 0.5));
+  panel.style.width = newWidth + 'px';
+  panelToggle.style.left = (newWidth + 4) + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if (!isResizing) return;
+  isResizing = false;
+  panelResize.classList.remove('dragging');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  savedPanelWidth = panel.offsetWidth;
+});
+
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();
 setColor('#3a3a38');
 initCells(cols, rows, false);
 resizeCanvases();
+updateTogglePosition();
