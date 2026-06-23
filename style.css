@@ -182,7 +182,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   gap: 8px;
   margin-bottom: 6px;
 }
-.size-row label { color: var(--text-muted); font-size: 12px; flex-shrink: 0; }
+.size-row label { color: var(--text-muted); font-size: 12px; flex-shrink: 0; width: 28px; }
 .size-row input[type=range] { flex: 1; accent-color: var(--accent); }
 .size-input {
   width: 48px;
