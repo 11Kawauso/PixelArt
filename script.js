@@ -481,39 +481,48 @@ document.getElementById('btn-load-img').addEventListener('click', () => {
   fileInput.click();
 });
 
-// ── パネルリサイズ ────────────────────────────────────
+// ── パネルリサイズ・開閉 ──────────────────────────────
 const panel = document.getElementById('panel');
 const panelResize = document.getElementById('panel-resize');
 const panelToggle = document.getElementById('panel-toggle');
+const MIN_PANEL_W = 220;
 let panelCollapsed = false;
-let savedPanelWidth = 260;
+let savedPanelWidth = panel.offsetWidth || 260;
 
-function updateTogglePosition() {
-  const w = panelCollapsed ? 0 : panel.offsetWidth;
-  panelToggle.style.left = (w + (panelCollapsed ? 0 : 4)) + 'px';
+function syncTogglePosition() {
+  const w = panel.getBoundingClientRect().width;
+  const handleW = panelCollapsed ? 0 : 4;
+  panelToggle.style.left = (w + handleW) + 'px';
   panelToggle.textContent = panelCollapsed ? '▶' : '◀';
 }
 
+// 開閉
 panelToggle.addEventListener('click', () => {
-  panelCollapsed = !panelCollapsed;
   if (panelCollapsed) {
-    savedPanelWidth = panel.offsetWidth;
-    panel.classList.add('collapsed');
-  } else {
+    panel.classList.add('animating');
     panel.classList.remove('collapsed');
     panel.style.width = savedPanelWidth + 'px';
+    panelCollapsed = false;
+  } else {
+    savedPanelWidth = panel.offsetWidth;
+    panel.classList.add('animating');
+    panel.classList.add('collapsed');
+    panelCollapsed = true;
   }
-  updateTogglePosition();
+  syncTogglePosition();
 });
 
 panel.addEventListener('transitionend', () => {
-  updateTogglePosition();
+  panel.classList.remove('animating');
+  syncTogglePosition();
 });
 
+// ドラッグリサイズ
 let isResizing = false;
 panelResize.addEventListener('mousedown', e => {
   e.preventDefault();
   isResizing = true;
+  panel.classList.remove('animating');
   panelResize.classList.add('dragging');
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
@@ -523,9 +532,9 @@ document.addEventListener('mousemove', e => {
   if (!isResizing) return;
   const appRect = document.querySelector('.app').getBoundingClientRect();
   let newWidth = e.clientX - appRect.left;
-  newWidth = Math.max(160, Math.min(newWidth, window.innerWidth * 0.5));
+  newWidth = Math.max(MIN_PANEL_W, Math.min(newWidth, window.innerWidth * 0.5));
   panel.style.width = newWidth + 'px';
-  panelToggle.style.left = (newWidth + 4) + 'px';
+  syncTogglePosition();
 });
 
 document.addEventListener('mouseup', () => {
@@ -542,4 +551,4 @@ buildPalette();
 setColor('#3a3a38');
 initCells(cols, rows, false);
 resizeCanvases();
-updateTogglePosition();
+syncTogglePosition();

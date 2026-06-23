@@ -79,7 +79,6 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 /* ── 左パネル ── */
 .panel {
   width: var(--panel);
-  min-width: 0;
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -88,15 +87,16 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
-  transition: width 0.25s ease, min-width 0.25s ease, padding 0.25s ease, border 0.25s ease;
 }
 .panel::-webkit-scrollbar {
   display: none;
 }
+.panel.animating {
+  transition: width 0.25s ease;
+}
 .panel.collapsed {
   width: 0 !important;
-  min-width: 0 !important;
-  border-right: none;
+  border-right-color: transparent;
   overflow: hidden;
 }
 
@@ -115,13 +115,13 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   background: var(--accent);
 }
 .panel.collapsed ~ .panel-resize {
-  display: none;
+  width: 0;
+  cursor: default;
 }
 
 /* パネル開閉ボタン */
 .panel-toggle {
   position: absolute;
-  left: var(--panel);
   top: 50%;
   transform: translateY(-50%);
   z-index: 6;
@@ -138,7 +138,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: left 0.25s ease, background 0.1s;
+  transition: background 0.1s;
 }
 .panel-toggle:hover {
   background: var(--bg);
@@ -373,13 +373,13 @@ input[type=color] {
 
 /* ── レスポンシブ ── */
 @media (max-width: 768px) {
-  :root { --panel: 220px; }
+  :root { --panel: 240px; }
   header h1 { font-size: 13px; }
   header { gap: 6px; padding: 0 10px; }
   .statusbar { gap: 10px; padding: 0 8px; }
 }
 @media (max-width: 480px) {
-  :root { --panel: 180px; }
+  :root { --panel: 220px; }
   header { height: 38px; }
   header h1 { font-size: 12px; }
   .panel-section { padding: 10px 12px; }
