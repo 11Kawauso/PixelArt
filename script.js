@@ -485,7 +485,7 @@ document.getElementById('btn-load-img').addEventListener('click', () => {
 const panel = document.getElementById('panel');
 const panelResize = document.getElementById('panel-resize');
 const panelToggle = document.getElementById('panel-toggle');
-const MIN_PANEL_W = 220;
+const MIN_PANEL_W = 240;
 let panelCollapsed = false;
 let savedPanelWidth = panel.offsetWidth || 260;
 
@@ -499,21 +499,14 @@ function syncTogglePosition() {
 // 開閉
 panelToggle.addEventListener('click', () => {
   if (panelCollapsed) {
-    panel.classList.add('animating');
     panel.classList.remove('collapsed');
     panel.style.width = savedPanelWidth + 'px';
     panelCollapsed = false;
   } else {
     savedPanelWidth = panel.offsetWidth;
-    panel.classList.add('animating');
     panel.classList.add('collapsed');
     panelCollapsed = true;
   }
-  syncTogglePosition();
-});
-
-panel.addEventListener('transitionend', () => {
-  panel.classList.remove('animating');
   syncTogglePosition();
 });
 

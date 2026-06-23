@@ -91,9 +91,6 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 .panel::-webkit-scrollbar {
   display: none;
 }
-.panel.animating {
-  transition: width 0.25s ease;
-}
 .panel.collapsed {
   width: 0 !important;
   border-right-color: transparent;
