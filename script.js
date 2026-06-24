@@ -385,13 +385,12 @@ function buildPalette() {
     grid.appendChild(s);
   });
 }
-const colorHistoryList = [null, null, null];
-const dot0 = document.getElementById('dot-0');
-const dot1 = document.getElementById('dot-1');
-const dot2 = document.getElementById('dot-2');
+const COLOR_HISTORY_SIZE = 5;
+const colorHistoryList = Array(COLOR_HISTORY_SIZE).fill(null);
+const colorDots = Array.from({length: COLOR_HISTORY_SIZE}, (_, i) => document.getElementById('dot-' + i));
 
 function updateColorDots() {
-  [dot0, dot1, dot2].forEach((dot, i) => {
+  colorDots.forEach((dot, i) => {
     const c = colorHistoryList[i];
     dot.style.background = c || 'transparent';
     dot.style.visibility = c ? 'visible' : 'hidden';
@@ -400,15 +399,16 @@ function updateColorDots() {
 
 function pushColorHistory(hex) {
   if (colorHistoryList[0] === hex) return;
-  colorHistoryList[2] = colorHistoryList[1];
-  colorHistoryList[1] = colorHistoryList[0];
+  for (let i = COLOR_HISTORY_SIZE - 1; i > 0; i--) {
+    colorHistoryList[i] = colorHistoryList[i - 1];
+  }
   colorHistoryList[0] = hex;
   updateColorDots();
 }
 
-dot0.addEventListener('click', () => { if (colorHistoryList[0]) setColor(colorHistoryList[0]); });
-dot1.addEventListener('click', () => { if (colorHistoryList[1]) setColor(colorHistoryList[1]); });
-dot2.addEventListener('click', () => { if (colorHistoryList[2]) setColor(colorHistoryList[2]); });
+colorDots.forEach((dot, i) => {
+  dot.addEventListener('click', () => { if (colorHistoryList[i]) setColor(colorHistoryList[i]); });
+});
 
 function setColor(hex) {
   currentColor = hex;

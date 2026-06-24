@@ -390,13 +390,13 @@ input, select, textarea {
 
 /* 色履歴 */
 .color-history {
-  position: fixed;
-  bottom: 36px;
-  left: 12px;
-  z-index: 50;
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 8;
   display: flex;
   align-items: end;
-  gap: 6px;
+  gap: 5px;
 }
 .color-dot {
   border-radius: 50%;
@@ -406,9 +406,11 @@ input, select, textarea {
   transition: transform 0.1s;
 }
 .color-dot:hover { transform: scale(1.15); }
+.dot-xs     { width: 14px; height: 14px; }
 .dot-small  { width: 18px; height: 18px; }
-.dot-medium { width: 24px; height: 24px; }
-.dot-large  { width: 32px; height: 32px; }
+.dot-medium { width: 22px; height: 22px; }
+.dot-large  { width: 28px; height: 28px; }
+.dot-xl     { width: 34px; height: 34px; }
 
 /* ズームコントロール */
 .zoom-controls {
