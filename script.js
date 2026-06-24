@@ -283,7 +283,7 @@ function applyToolSingle(col, row) {
   if (currentTool === 'pen') {
     paintStyle(col, row, currentColor);
   } else if (currentTool === 'erase') {
-    paintStyle(col, row, null);
+    paintBrush(col, row, null);
   } else if (currentTool === 'pick') {
     const c = cells[row][col];
     if (c) { setColor(c); }
