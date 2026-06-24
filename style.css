@@ -336,7 +336,7 @@ input, select, textarea {
   justify-content: center;
   min-width: 100%;
   min-height: 100%;
-  padding: 40vh 30vw;
+  padding: 50vh 50vw;
 }
 
 #canvas-wrap {
@@ -493,7 +493,7 @@ input, select, textarea {
 
   /* キャンバス余白縮小 */
   .canvas-scroll-pad {
-    padding: 20vh 15vw;
+    padding: 40vh 40vw;
   }
 
   /* ズームコントロール */
