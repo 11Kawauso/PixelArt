@@ -558,6 +558,36 @@ document.getElementById('canvas-area').addEventListener('wheel', e => {
   setZoom(delta > 0 ? zoom * factor : zoom / factor);
 }, {passive: false});
 
+// ── 右クリックドラッグでパン ──────────────────────────
+let isPanning = false;
+let panStartX = 0, panStartY = 0;
+let scrollStartX = 0, scrollStartY = 0;
+
+canvasArea.addEventListener('mousedown', e => {
+  if (e.button !== 2) return;
+  e.preventDefault();
+  isPanning = true;
+  panStartX = e.clientX;
+  panStartY = e.clientY;
+  scrollStartX = canvasArea.scrollLeft;
+  scrollStartY = canvasArea.scrollTop;
+  canvasArea.style.cursor = 'grabbing';
+});
+
+document.addEventListener('mousemove', e => {
+  if (!isPanning) return;
+  canvasArea.scrollLeft = scrollStartX - (e.clientX - panStartX);
+  canvasArea.scrollTop  = scrollStartY - (e.clientY - panStartY);
+});
+
+document.addEventListener('mouseup', e => {
+  if (e.button !== 2 || !isPanning) return;
+  isPanning = false;
+  canvasArea.style.cursor = '';
+});
+
+canvasArea.addEventListener('contextmenu', e => e.preventDefault());
+
 // ── クリア ────────────────────────────────────────────
 document.getElementById('btn-clear').addEventListener('click', () => {
   if (!started) return;
