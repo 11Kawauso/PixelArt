@@ -63,6 +63,20 @@ function canvasSize() {
   return { w: cols * px, h: rows * px };
 }
 
+const scrollPad = document.querySelector('.canvas-scroll-pad');
+const canvasArea = document.getElementById('canvas-area');
+
+function updateScrollPadding() {
+  const areaW = canvasArea.clientWidth;
+  const areaH = canvasArea.clientHeight;
+  const {w, h} = canvasSize();
+  const canvasW = w * zoom;
+  const canvasH = h * zoom;
+  const padX = Math.max(areaW * 0.5, canvasW * 0.5);
+  const padY = Math.max(areaH * 0.5, canvasH * 0.5);
+  scrollPad.style.padding = `${padY}px ${padX}px`;
+}
+
 function resizeCanvases() {
   const {w, h} = canvasSize();
   [cBg, cMain, cOv].forEach(c => { c.width = w; c.height = h; });
@@ -72,6 +86,7 @@ function resizeCanvases() {
     c.style.width  = (w * zoom) + 'px';
     c.style.height = (h * zoom) + 'px';
   });
+  updateScrollPadding();
   drawAll();
 }
 
@@ -456,6 +471,7 @@ function setZoom(z) {
     c.style.height = (h * zoom) + 'px';
   });
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
+  updateScrollPadding();
 }
 document.getElementById('btn-zoom-in').addEventListener('click',  () => setZoom(zoom * 1.5));
 document.getElementById('btn-zoom-out').addEventListener('click', () => setZoom(zoom / 1.5));
