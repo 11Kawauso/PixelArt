@@ -385,9 +385,35 @@ function buildPalette() {
     grid.appendChild(s);
   });
 }
+const colorHistoryList = [null, null, null];
+const dot0 = document.getElementById('dot-0');
+const dot1 = document.getElementById('dot-1');
+const dot2 = document.getElementById('dot-2');
+
+function updateColorDots() {
+  [dot0, dot1, dot2].forEach((dot, i) => {
+    const c = colorHistoryList[i];
+    dot.style.background = c || 'transparent';
+    dot.style.visibility = c ? 'visible' : 'hidden';
+  });
+}
+
+function pushColorHistory(hex) {
+  if (colorHistoryList[0] === hex) return;
+  colorHistoryList[2] = colorHistoryList[1];
+  colorHistoryList[1] = colorHistoryList[0];
+  colorHistoryList[0] = hex;
+  updateColorDots();
+}
+
+dot0.addEventListener('click', () => { if (colorHistoryList[0]) setColor(colorHistoryList[0]); });
+dot1.addEventListener('click', () => { if (colorHistoryList[1]) setColor(colorHistoryList[1]); });
+dot2.addEventListener('click', () => { if (colorHistoryList[2]) setColor(colorHistoryList[2]); });
+
 function setColor(hex) {
   currentColor = hex;
   colorPicker.value = hex;
+  pushColorHistory(hex);
   document.querySelectorAll('.swatch').forEach(s => {
     s.classList.toggle('selected', s.style.background === hexToRgb(hex) || s.style.background === hex);
   });
