@@ -103,6 +103,7 @@ function drawCells() {
       }
     }
   }
+  drawGridLines();
 }
 
 function drawGridLines() {
