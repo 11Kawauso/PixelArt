@@ -437,6 +437,7 @@ document.getElementById('btn-zoom-out').addEventListener('click', () => setZoom(
 
 // マウスホイールズーム
 document.getElementById('canvas-area').addEventListener('wheel', e => {
+  if (!e.ctrlKey && !e.metaKey) return;
   e.preventDefault();
   const delta = -e.deltaY * (e.deltaMode === 1 ? 20 : 1);
   const factor = 1 + Math.min(Math.abs(delta) * 0.002, 0.15);
