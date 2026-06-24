@@ -485,37 +485,61 @@ document.getElementById('btn-load-img').addEventListener('click', () => {
 const panel = document.getElementById('panel');
 const panelResize = document.getElementById('panel-resize');
 const panelToggle = document.getElementById('panel-toggle');
+const panelBackdrop = document.getElementById('panel-backdrop');
 const MIN_PANEL_W = 240;
 let panelCollapsed = false;
 let savedPanelWidth = panel.offsetWidth || 260;
 
+function isMobile() { return window.innerWidth <= 640; }
+
 function syncTogglePosition() {
-  const w = panel.getBoundingClientRect().width;
-  const handleW = panelCollapsed ? 0 : 4;
-  panelToggle.style.left = (w + handleW) + 'px';
   panelToggle.textContent = panelCollapsed ? '▶' : '◀';
+  if (isMobile()) {
+    panelToggle.style.left = '0px';
+    panelBackdrop.classList.toggle('visible', !panelCollapsed);
+  } else {
+    const w = panel.getBoundingClientRect().width;
+    const handleW = panelCollapsed ? 0 : 4;
+    panelToggle.style.left = (w + handleW) + 'px';
+    panelBackdrop.classList.remove('visible');
+  }
 }
 
-// 開閉
-panelToggle.addEventListener('click', () => {
+function togglePanel() {
   if (panelCollapsed) {
     panel.classList.remove('collapsed');
-    panel.style.width = savedPanelWidth + 'px';
+    if (!isMobile()) panel.style.width = savedPanelWidth + 'px';
     panelCollapsed = false;
   } else {
-    savedPanelWidth = panel.offsetWidth;
+    if (!isMobile()) savedPanelWidth = panel.offsetWidth;
     panel.classList.add('collapsed');
     panelCollapsed = true;
   }
   syncTogglePosition();
+}
+
+panelToggle.addEventListener('click', togglePanel);
+panelBackdrop.addEventListener('click', () => {
+  if (!panelCollapsed) togglePanel();
 });
 
-// ドラッグリサイズ
+// モバイル時は初期状態で閉じる
+if (isMobile()) {
+  panel.classList.add('collapsed');
+  panelCollapsed = true;
+}
+
+// 画面リサイズ時にモード切替
+window.addEventListener('resize', () => {
+  syncTogglePosition();
+});
+
+// ドラッグリサイズ（デスクトップのみ）
 let isResizing = false;
 panelResize.addEventListener('mousedown', e => {
+  if (isMobile()) return;
   e.preventDefault();
   isResizing = true;
-  panel.classList.remove('animating');
   panelResize.classList.add('dragging');
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';

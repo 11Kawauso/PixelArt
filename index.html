@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>ドット絵エディタ</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -12,9 +12,9 @@
 <header>
   <h1>ドット絵エディタ</h1>
   <div class="header-sep"></div>
-  <button id="btn-undo" disabled title="Ctrl+Z">↩ 元に戻す</button>
+  <button id="btn-undo" disabled title="Ctrl+Z">↩ <span class="hide-mobile">元に戻す</span></button>
   <button id="btn-clear" class="danger">クリア</button>
-  <button id="btn-download" class="primary">↓ PNG保存</button>
+  <button id="btn-download" class="primary">↓ <span class="hide-mobile">PNG</span>保存</button>
 </header>
 
 <!-- メイン -->
@@ -95,6 +95,9 @@
 
   <!-- リサイズハンドル -->
   <div class="panel-resize" id="panel-resize"></div>
+
+  <!-- モバイル用背景オーバーレイ -->
+  <div class="panel-backdrop" id="panel-backdrop"></div>
 
   <!-- パネル開閉ボタン -->
   <button class="panel-toggle" id="panel-toggle" title="パネルの表示切替">◀</button>

@@ -20,9 +20,13 @@ body {
   background: var(--bg);
   color: var(--text);
   height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* ── ヘッダー ── */
@@ -87,6 +91,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
+  touch-action: pan-y;
 }
 .panel::-webkit-scrollbar {
   display: none;
@@ -240,6 +245,12 @@ input[type=color] {
   background: var(--surface);
 }
 
+input, select, textarea {
+  -webkit-user-select: auto;
+  user-select: auto;
+  touch-action: auto;
+}
+
 /* 画像アップロード */
 #drop-zone {
   border: 1.5px dashed var(--border-strong);
@@ -378,6 +389,11 @@ input[type=color] {
 .start-card p { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
 .start-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: center; }
 
+/* パネル背景オーバーレイ（モバイル用） */
+.panel-backdrop {
+  display: none;
+}
+
 /* ── レスポンシブ ── */
 @media (max-width: 768px) {
   :root { --panel: 240px; }
@@ -385,10 +401,71 @@ input[type=color] {
   header { gap: 6px; padding: 0 10px; }
   .statusbar { gap: 10px; padding: 0 8px; }
 }
-@media (max-width: 480px) {
-  :root { --panel: 220px; }
-  header { height: 38px; }
-  header h1 { font-size: 12px; }
-  .panel-section { padding: 10px 12px; }
-  .palette-grid { grid-template-columns: repeat(6, 1fr); }
+
+@media (max-width: 640px) {
+  header { height: 40px; gap: 6px; padding: 0 8px; }
+  header h1 { font-size: 13px; }
+  .hide-mobile { display: none; }
+
+  /* パネル：オーバーレイドロワー */
+  .panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
+    height: 100vh;
+    height: 100dvh;
+    width: 280px;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+  }
+  .panel.collapsed {
+    display: none;
+  }
+
+  /* リサイズハンドル非表示 */
+  .panel-resize { display: none; }
+
+  /* 背景オーバーレイ */
+  .panel-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+    background: rgba(0,0,0,0.3);
+  }
+  .panel-backdrop.visible {
+    display: block;
+  }
+
+  /* トグルボタン */
+  .panel-toggle {
+    left: 0 !important;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 44px;
+    font-size: 11px;
+    z-index: 6;
+  }
+  .panel-toggle:active {
+    transform: translateY(-50%);
+  }
+
+  /* キャンバス余白縮小 */
+  .canvas-scroll-pad {
+    padding: 20vh 15vw;
+  }
+
+  /* ズームコントロール */
+  .zoom-controls {
+    bottom: 8px;
+    right: 8px;
+  }
+
+  /* ステータスバー */
+  .statusbar { font-size: 10px; gap: 8px; padding: 0 6px; }
+
+  /* スタートカード */
+  .start-card { padding: 20px 20px; }
+  .start-card p { font-size: 11px; }
 }
