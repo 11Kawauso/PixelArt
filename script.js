@@ -74,8 +74,21 @@ function resizeCanvases() {
 }
 
 function drawAll() {
-  drawGrid();
+  drawBg();
   drawCells();
+  drawGridLines();
+}
+
+function drawBg() {
+  const px = cellPx();
+  const ctx = cBg.getContext('2d');
+  ctx.clearRect(0, 0, cBg.width, cBg.height);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      ctx.fillStyle = (r + c) % 2 === 0 ? '#cccccc' : '#eeeeee';
+      ctx.fillRect(c * px, r * px, px, px);
+    }
+  }
 }
 
 function drawCells() {
@@ -92,19 +105,11 @@ function drawCells() {
   }
 }
 
-function drawGrid() {
+function drawGridLines() {
   const px = cellPx();
-  const ctx = cBg.getContext('2d');
-  ctx.clearRect(0, 0, cBg.width, cBg.height);
-  // 市松模様（透過）
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      ctx.fillStyle = (r + c) % 2 === 0 ? '#cccccc' : '#eeeeee';
-      ctx.fillRect(c * px, r * px, px, px);
-    }
-  }
+  const ctx = cMain.getContext('2d');
   if (!showGrid) return;
-  ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
   ctx.lineWidth = 0.5;
   for (let c = 0; c <= cols; c++) {
     ctx.beginPath();
@@ -118,6 +123,12 @@ function drawGrid() {
     ctx.lineTo(cols * px, r * px);
     ctx.stroke();
   }
+}
+
+function drawGrid() {
+  drawBg();
+  drawCells();
+  drawGridLines();
 }
 
 function drawOverlayCell(col, row) {

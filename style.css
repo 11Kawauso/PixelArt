@@ -193,6 +193,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   font-size: 11px;
   padding: 0;
   border-radius: var(--radius);
+  justify-content: center;
 }
 .preset-btn.active {
   background: var(--accent);
