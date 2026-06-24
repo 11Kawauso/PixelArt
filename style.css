@@ -346,9 +346,10 @@ input, select, textarea {
 
 /* ズームコントロール */
 .zoom-controls {
-  position: absolute;
-  bottom: 12px;
+  position: fixed;
+  bottom: 36px;
   right: 12px;
+  z-index: 50;
   display: flex;
   gap: 4px;
   align-items: center;
@@ -357,6 +358,7 @@ input, select, textarea {
   border-radius: 20px;
   padding: 4px 8px;
   font-size: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 .zoom-controls button {
   border: none;
