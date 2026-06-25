@@ -473,20 +473,26 @@ function buildCustomPalette() {
       }
       s.addEventListener('click', () => {
         pendingSlotIndex = i;
-        customColorPicker.click();
+        document.getElementById('color-pick-modal').style.display = 'flex';
       });
       customPaletteGrid.appendChild(s);
     }
   });
 }
 
-customColorPicker.addEventListener('input', () => {
+document.getElementById('btn-color-ok').addEventListener('click', () => {
   if (pendingSlotIndex >= 0) {
     customColors[pendingSlotIndex] = customColorPicker.value;
     setColor(customColorPicker.value);
     buildCustomPalette();
     pendingSlotIndex = -1;
   }
+  document.getElementById('color-pick-modal').style.display = 'none';
+});
+
+document.getElementById('btn-color-cancel').addEventListener('click', () => {
+  pendingSlotIndex = -1;
+  document.getElementById('color-pick-modal').style.display = 'none';
 });
 
 btnDeleteMode.addEventListener('click', () => {

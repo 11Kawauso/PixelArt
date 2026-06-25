@@ -345,6 +345,16 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   min-width: 240px;
 }
 .confirm-card p { font-size: 13px; margin-bottom: 14px; }
+.color-pick-input {
+  width: 100%;
+  height: 48px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 2px;
+  cursor: pointer;
+  background: var(--surface);
+  margin-bottom: 14px;
+}
 .confirm-actions { display: flex; gap: 8px; justify-content: center; }
 
 input[type=color] {
