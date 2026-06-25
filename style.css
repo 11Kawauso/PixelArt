@@ -455,16 +455,15 @@ input, select, textarea {
 }
 .statusbar span b { color: var(--text); font-weight: 500; }
 
-/* モーダル（ドロップ案内） */
+/* スタートモーダル */
 #start-overlay {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  background: rgba(247,247,245,0.85);
+  background: rgba(0,0,0,0.4);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10;
-  pointer-events: none;
+  z-index: 200;
 }
 .start-card {
   background: var(--surface);
@@ -472,7 +471,6 @@ input, select, textarea {
   border-radius: 10px;
   padding: 24px 32px;
   text-align: center;
-  pointer-events: all;
 }
 .start-card p { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
 .start-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: center; }

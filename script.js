@@ -767,11 +767,22 @@ function convertImage(img) {
 }
 
 // ── スタート ──────────────────────────────────────────
+function centerCanvas() {
+  const padEl = document.querySelector('.canvas-scroll-pad');
+  const {w, h} = canvasSize();
+  const cw = w * zoom, ch = h * zoom;
+  const padX = parseFloat(padEl.style.paddingLeft) || 0;
+  const padY = parseFloat(padEl.style.paddingTop) || 0;
+  canvasArea.scrollLeft = padX + cw / 2 - canvasArea.clientWidth / 2;
+  canvasArea.scrollTop  = padY + ch / 2 - canvasArea.clientHeight / 2;
+}
+
 function startEditor() {
   started = true;
   overlay.style.display = 'none';
   initCells(cols, rows, false);
   resizeCanvases();
+  centerCanvas();
 }
 
 document.getElementById('btn-new').addEventListener('click', () => {
