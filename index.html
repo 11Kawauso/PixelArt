@@ -91,7 +91,28 @@
     <div class="panel-section">
       <div class="panel-label">カラー</div>
       <div class="palette-grid" id="palette"></div>
-      <input type="color" id="color-picker" value="#3a3a38">
+    </div>
+
+    <!-- オリジナルカラーパレット -->
+    <div class="panel-section">
+      <div class="panel-label">オリジナルカラー</div>
+      <div class="palette-grid" id="custom-palette"></div>
+      <input type="color" id="custom-color-picker" value="#ff0000" style="display:none">
+      <div class="custom-palette-actions">
+        <button id="btn-delete-mode">削除</button>
+        <button id="btn-delete-all" class="danger">全削除</button>
+      </div>
+    </div>
+
+    <!-- 全削除確認モーダル -->
+    <div class="confirm-modal" id="confirm-delete-all" style="display:none">
+      <div class="confirm-card">
+        <p>オリジナルカラーをすべて削除しますか？</p>
+        <div class="confirm-actions">
+          <button id="btn-confirm-ok" class="primary">OK</button>
+          <button id="btn-confirm-no">いいえ</button>
+        </div>
+      </div>
     </div>
 
     <!-- 画像から変換 -->

@@ -299,6 +299,54 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 .swatch:hover { transform: scale(1.15); }
 .swatch.selected { border-color: var(--text); }
 
+/* オリジナルカラーパレット */
+.swatch-empty {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 1.5px dashed var(--border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: transform 0.1s, background 0.1s;
+}
+.swatch-empty:hover { background: var(--bg); transform: scale(1.1); }
+.swatch.delete-target { border-color: var(--danger); border-style: dashed; }
+.custom-palette-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+}
+.custom-palette-actions button { flex: 1; justify-content: center; }
+.custom-palette-actions button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* 確認モーダル */
+.confirm-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.confirm-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  text-align: center;
+  min-width: 240px;
+}
+.confirm-card p { font-size: 13px; margin-bottom: 14px; }
+.confirm-actions { display: flex; gap: 8px; justify-content: center; }
+
 input[type=color] {
   width: 100%;
   height: 28px;

@@ -36,7 +36,6 @@ const statPos   = document.getElementById('stat-pos');
 const statColor = document.getElementById('stat-color');
 const statGrid  = document.getElementById('stat-grid');
 const zoomLabel = document.getElementById('zoom-label');
-const colorPicker = document.getElementById('color-picker');
 
 // 1マスのピクセル数をグリッドサイズに応じて自動調整
 function cellPx() {
@@ -421,7 +420,6 @@ colorDots.forEach((dot, i) => {
 
 function setColor(hex) {
   currentColor = hex;
-  colorPicker.value = hex;
   pushColorHistory(hex);
   document.querySelectorAll('.swatch').forEach(s => {
     s.classList.toggle('selected', s.style.background === hexToRgb(hex) || s.style.background === hex);
@@ -436,7 +434,80 @@ function hexToRgb(hex) {
   const b = parseInt(hex.slice(5,7),16);
   return `rgb(${r}, ${g}, ${b})`;
 }
-colorPicker.addEventListener('input', e => setColor(e.target.value));
+
+// ── オリジナルカラーパレット ──────────────────────────
+const CUSTOM_PALETTE_SIZE = 48;
+const customPaletteGrid = document.getElementById('custom-palette');
+const customColorPicker = document.getElementById('custom-color-picker');
+const btnDeleteMode = document.getElementById('btn-delete-mode');
+const btnDeleteAll = document.getElementById('btn-delete-all');
+const confirmModal = document.getElementById('confirm-delete-all');
+let customColors = Array(CUSTOM_PALETTE_SIZE).fill(null);
+let deleteMode = false;
+let pendingSlotIndex = -1;
+
+function buildCustomPalette() {
+  customPaletteGrid.innerHTML = '';
+  customColors.forEach((color, i) => {
+    if (color) {
+      const s = document.createElement('div');
+      s.className = 'swatch' + (deleteMode ? ' delete-target' : '');
+      s.style.background = color;
+      s.title = color;
+      s.addEventListener('click', () => {
+        if (deleteMode) {
+          customColors[i] = null;
+          buildCustomPalette();
+        } else {
+          setColor(color);
+        }
+      });
+      customPaletteGrid.appendChild(s);
+    } else {
+      const s = document.createElement('div');
+      s.className = 'swatch-empty';
+      s.textContent = '＋';
+      if (deleteMode) {
+        s.style.opacity = '0.3';
+        s.style.pointerEvents = 'none';
+      }
+      s.addEventListener('click', () => {
+        pendingSlotIndex = i;
+        customColorPicker.click();
+      });
+      customPaletteGrid.appendChild(s);
+    }
+  });
+}
+
+customColorPicker.addEventListener('input', () => {
+  if (pendingSlotIndex >= 0) {
+    customColors[pendingSlotIndex] = customColorPicker.value;
+    setColor(customColorPicker.value);
+    buildCustomPalette();
+    pendingSlotIndex = -1;
+  }
+});
+
+btnDeleteMode.addEventListener('click', () => {
+  deleteMode = !deleteMode;
+  btnDeleteMode.classList.toggle('active', deleteMode);
+  buildCustomPalette();
+});
+
+btnDeleteAll.addEventListener('click', () => {
+  confirmModal.style.display = 'flex';
+});
+
+document.getElementById('btn-confirm-ok').addEventListener('click', () => {
+  customColors.fill(null);
+  buildCustomPalette();
+  confirmModal.style.display = 'none';
+});
+
+document.getElementById('btn-confirm-no').addEventListener('click', () => {
+  confirmModal.style.display = 'none';
+});
 
 // ── 描画スタイル ──────────────────────────────────────
 const drawStyleSection = document.getElementById('draw-style-section');
@@ -877,6 +948,7 @@ document.addEventListener('mouseup', () => {
 
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();
+buildCustomPalette();
 setColor('#3a3a38');
 initCells(cols, rows, false);
 resizeCanvases();
