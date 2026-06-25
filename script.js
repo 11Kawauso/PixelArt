@@ -17,6 +17,7 @@ let zoom = 1;
 let currentTool = 'pen';
 let currentColor = '#3a3a38';
 let convertMethod = 'mode';
+let convertColorCount = 32;
 let showGrid = true;
 let uploadedImage = null;
 let isPainting = false;
@@ -769,6 +770,14 @@ document.querySelectorAll('.method-btn').forEach(b => {
   });
 });
 
+document.querySelectorAll('.cc-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    convertColorCount = parseInt(b.dataset.colors);
+    document.querySelectorAll('.cc-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  });
+});
+
 document.getElementById('btn-convert').addEventListener('click', () => {
   if (!uploadedImage) return;
   pushHistory();
@@ -840,7 +849,78 @@ function convertImage(img) {
       }
     }
   }
+  quantizeColors(convertColorCount);
   drawCells();
+}
+
+function quantizeColors(maxColors) {
+  const colorMap = {};
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (cells[r][c]) colorMap[cells[r][c]] = true;
+    }
+  }
+  const uniqueColors = Object.keys(colorMap).map(hex => {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return [r, g, b, hex];
+  });
+  if (uniqueColors.length <= maxColors) return;
+
+  const palette = medianCut(uniqueColors.map(c => [c[0],c[1],c[2]]), maxColors);
+  const lookup = {};
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const hex = cells[r][c];
+      if (!hex) continue;
+      if (lookup[hex]) { cells[r][c] = lookup[hex]; continue; }
+      const cr = parseInt(hex.slice(1,3),16);
+      const cg = parseInt(hex.slice(3,5),16);
+      const cb = parseInt(hex.slice(5,7),16);
+      let bestDist = Infinity, bestHex = hex;
+      for (const p of palette) {
+        const dr = cr-p[0], dg = cg-p[1], db = cb-p[2];
+        const d = dr*dr + dg*dg + db*db;
+        if (d < bestDist) { bestDist = d; bestHex = `#${p.map(v=>v.toString(16).padStart(2,'0')).join('')}`; }
+      }
+      lookup[hex] = bestHex;
+      cells[r][c] = bestHex;
+    }
+  }
+}
+
+function medianCut(colors, maxColors) {
+  if (colors.length === 0) return [];
+  let buckets = [colors];
+  while (buckets.length < maxColors) {
+    let longest = -1, longestIdx = 0;
+    for (let i = 0; i < buckets.length; i++) {
+      if (buckets[i].length <= 1) continue;
+      const ranges = [0,1,2].map(ch => {
+        let mn = 255, mx = 0;
+        for (const c of buckets[i]) { mn = Math.min(mn, c[ch]); mx = Math.max(mx, c[ch]); }
+        return mx - mn;
+      });
+      const maxRange = Math.max(...ranges);
+      if (maxRange > longest) { longest = maxRange; longestIdx = i; }
+    }
+    if (longest <= 0) break;
+    const bucket = buckets[longestIdx];
+    const ranges = [0,1,2].map(ch => {
+      let mn = 255, mx = 0;
+      for (const c of bucket) { mn = Math.min(mn, c[ch]); mx = Math.max(mx, c[ch]); }
+      return mx - mn;
+    });
+    const splitCh = ranges.indexOf(Math.max(...ranges));
+    bucket.sort((a, b) => a[splitCh] - b[splitCh]);
+    const mid = Math.floor(bucket.length / 2);
+    buckets.splice(longestIdx, 1, bucket.slice(0, mid), bucket.slice(mid));
+  }
+  return buckets.map(b => {
+    const avg = [0,1,2].map(ch => Math.round(b.reduce((s,c) => s+c[ch], 0) / b.length));
+    return avg;
+  });
 }
 
 // ── スタート ──────────────────────────────────────────

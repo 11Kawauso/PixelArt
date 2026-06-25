@@ -377,6 +377,31 @@ input, select, textarea {
   touch-action: auto;
 }
 
+/* 色数プリセット */
+.color-count-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.cc-btn {
+  width: 100%;
+  height: auto;
+  padding: 5px 4px;
+  border-radius: var(--radius);
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.2;
+}
+.cc-num { font-size: 11px; font-weight: 600; }
+.cc-label { font-size: 9px; color: var(--text-muted); }
+.cc-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.cc-btn.active .cc-label { color: rgba(255,255,255,0.7); }
+
 /* 画像アップロード */
 #drop-zone {
   border: 1.5px dashed var(--border-strong);
