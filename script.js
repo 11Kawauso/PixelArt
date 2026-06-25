@@ -377,7 +377,7 @@ const colorHistoryEl = document.getElementById('color-history');
 function updateColorHistoryPos() {
   const rect = canvasArea.getBoundingClientRect();
   colorHistoryEl.style.left = (rect.left + 10) + 'px';
-  colorHistoryEl.style.bottom = (window.innerHeight - rect.bottom + 10) + 'px';
+  colorHistoryEl.style.bottom = (window.innerHeight - rect.bottom + 30) + 'px';
 }
 window.addEventListener('resize', updateColorHistoryPos);
 
