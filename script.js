@@ -26,6 +26,9 @@ let started = false;
 let brushSize = 1;
 let drawStyle = 'normal';
 let detectLine = false;
+let selectionMode = 'none'; // 'none', 'range', 'color'
+let selectionMask = null;   // null = all editable, or bool[][]
+let rangeStart = null;
 
 // ── DOM ───────────────────────────────────────────────
 const cBg  = document.getElementById('canvas-bg');
@@ -160,10 +163,25 @@ function brushRect(col, row) {
   };
 }
 
+function drawSelectionOverlay(ctx) {
+  if (!selectionMask) return;
+  const px = cellPx();
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!selectionMask[r][c]) {
+        ctx.fillRect(c * px, r * px, px, px);
+      }
+    }
+  }
+}
+
 function drawOverlayCell(col, row) {
   const px = cellPx();
   const ctx = cOv.getContext('2d');
   ctx.clearRect(0, 0, cOv.width, cOv.height);
+  drawSelectionOverlay(ctx);
+  if (selectionMode === 'range' && rangeStart) return;
   if (col < 0 || col >= cols || row < 0 || row >= rows) return;
   const b = brushRect(col, row);
   const x1 = Math.max(0, b.c1) * px;
@@ -186,11 +204,15 @@ function getCell(e) {
   return { col: Math.floor(x / px), row: Math.floor(y / px) };
 }
 
+function isCellEditable(r, c) {
+  return !selectionMask || (selectionMask[r] && selectionMask[r][c]);
+}
+
 function paintBrush(col, row, value) {
   const b = brushRect(col, row);
   for (let r = b.r1; r <= b.r2; r++) {
     for (let c = b.c1; c <= b.c2; c++) {
-      if (c >= 0 && c < cols && r >= 0 && r < rows) {
+      if (c >= 0 && c < cols && r >= 0 && r < rows && isCellEditable(r, c)) {
         cells[r][c] = value;
       }
     }
@@ -293,12 +315,14 @@ function applyToolSingle(col, row) {
 }
 
 function floodFill(startCol, startRow, newColor) {
+  if (!isCellEditable(startRow, startCol)) return;
   const target = cells[startRow][startCol];
   if (target === newColor) return;
   const stack = [[startCol, startRow]];
   while (stack.length) {
     const [c, r] = stack.pop();
     if (c < 0 || c >= cols || r < 0 || r >= rows) continue;
+    if (!isCellEditable(r, c)) continue;
     if (cells[r][c] !== target) continue;
     cells[r][c] = newColor;
     stack.push([c+1,r],[c-1,r],[c,r+1],[c,r-1]);
@@ -307,9 +331,19 @@ function floodFill(startCol, startRow, newColor) {
 
 cOv.addEventListener('mousedown', e => {
   if (!started || e.button !== 0) return;
+  const {col, row} = getCell(e);
+  if (selectionMode === 'range') {
+    rangeStart = {col, row};
+    return;
+  }
+  if (selectionMode === 'color') {
+    applyColorSelection(col, row);
+    selectionMode = 'none';
+    updateSelectionButtons();
+    return;
+  }
   pushHistory();
   isPainting = true;
-  const {col, row} = getCell(e);
   lastCell = {col, row};
   applyToolSingle(col, row);
   drawCells();
@@ -317,6 +351,10 @@ cOv.addEventListener('mousedown', e => {
 cOv.addEventListener('mousemove', e => {
   if (!started) return;
   const {col, row} = getCell(e);
+  if (selectionMode === 'range' && rangeStart) {
+    drawRangePreview(rangeStart.col, rangeStart.row, col, row);
+    return;
+  }
   drawOverlayCell(col, row);
   statPos.textContent = `${col+1}, ${row+1}`;
   const c = cells[row] && cells[row][col];
@@ -326,7 +364,17 @@ cOv.addEventListener('mousemove', e => {
   applyToolLine(lastCell.col, lastCell.row, col, row);
   lastCell = {col, row};
 });
-document.addEventListener('mouseup', () => { isPainting = false; lastCell = null; });
+document.addEventListener('mouseup', e => {
+  if (selectionMode === 'range' && rangeStart) {
+    const {col, row} = getCell(e);
+    applyRangeSelection(rangeStart.col, rangeStart.row, col, row);
+    rangeStart = null;
+    selectionMode = 'none';
+    updateSelectionButtons();
+    return;
+  }
+  isPainting = false; lastCell = null;
+});
 cOv.addEventListener('mouseleave',() => {
   cOv.getContext('2d').clearRect(0,0,cOv.width,cOv.height);
   statPos.textContent = '—';
@@ -568,6 +616,81 @@ document.getElementById('btn-confirm-ok').addEventListener('click', () => {
 document.getElementById('btn-confirm-no').addEventListener('click', () => {
   confirmModal.style.display = 'none';
 });
+
+// ── 選択機能 ──────────────────────────────────────────
+const btnSelRange = document.getElementById('btn-sel-range');
+const btnSelColor = document.getElementById('btn-sel-color');
+const btnSelClear = document.getElementById('btn-sel-clear');
+
+function updateSelectionButtons() {
+  btnSelRange.classList.toggle('active', selectionMode === 'range');
+  btnSelColor.classList.toggle('active', selectionMode === 'color');
+  btnSelClear.style.display = selectionMask ? '' : 'none';
+  const ctx = cOv.getContext('2d');
+  ctx.clearRect(0, 0, cOv.width, cOv.height);
+  drawSelectionOverlay(ctx);
+}
+
+function applyRangeSelection(c1, r1, c2, r2) {
+  const minC = Math.max(0, Math.min(c1, c2));
+  const maxC = Math.min(cols - 1, Math.max(c1, c2));
+  const minR = Math.max(0, Math.min(r1, r2));
+  const maxR = Math.min(rows - 1, Math.max(r1, r2));
+  selectionMask = Array.from({length: rows}, (_, r) =>
+    Array.from({length: cols}, (_, c) => r >= minR && r <= maxR && c >= minC && c <= maxC)
+  );
+  updateSelectionButtons();
+}
+
+function applyColorSelection(col, row) {
+  if (col < 0 || col >= cols || row < 0 || row >= rows) return;
+  const targetColor = cells[row][col];
+  selectionMask = Array.from({length: rows}, (_, r) =>
+    Array.from({length: cols}, (_, c) => cells[r][c] === targetColor)
+  );
+  updateSelectionButtons();
+}
+
+function drawRangePreview(c1, r1, c2, r2) {
+  const px = cellPx();
+  const ctx = cOv.getContext('2d');
+  ctx.clearRect(0, 0, cOv.width, cOv.height);
+  const minC = Math.max(0, Math.min(c1, c2));
+  const maxC = Math.min(cols - 1, Math.max(c1, c2));
+  const minR = Math.max(0, Math.min(r1, r2));
+  const maxR = Math.min(rows - 1, Math.max(r1, r2));
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(0, 0, cOv.width, cOv.height);
+  ctx.clearRect(minC * px, minR * px, (maxC - minC + 1) * px, (maxR - minR + 1) * px);
+  ctx.strokeStyle = 'rgba(59,130,246,0.8)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(minC * px, minR * px, (maxC - minC + 1) * px, (maxR - minR + 1) * px);
+  ctx.setLineDash([]);
+}
+
+function clearSelection() {
+  selectionMask = null;
+  selectionMode = 'none';
+  rangeStart = null;
+  updateSelectionButtons();
+}
+
+btnSelRange.addEventListener('click', () => {
+  if (selectionMode === 'range') { clearSelection(); return; }
+  selectionMode = 'range';
+  selectionMask = null;
+  updateSelectionButtons();
+});
+
+btnSelColor.addEventListener('click', () => {
+  if (selectionMode === 'color') { clearSelection(); return; }
+  selectionMode = 'color';
+  selectionMask = null;
+  updateSelectionButtons();
+});
+
+btnSelClear.addEventListener('click', clearSelection);
 
 // ── 描画スタイル ──────────────────────────────────────
 const drawStyleSection = document.getElementById('draw-style-section');
