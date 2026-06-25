@@ -264,36 +264,52 @@ function snapshotHasFilledInRows(snap, c, r1, r2) {
   return false;
 }
 
+function paintRow(r, c1, c2, value) {
+  for (let c = c1; c <= c2; c++) {
+    if (c >= 0 && c < cols && r >= 0 && r < rows && isCellEditable(r, c)) {
+      cells[r][c] = value;
+    }
+  }
+}
+
+function paintCol(c, r1, r2, value) {
+  for (let r = r1; r <= r2; r++) {
+    if (c >= 0 && c < cols && r >= 0 && r < rows && isCellEditable(r, c)) {
+      cells[r][c] = value;
+    }
+  }
+}
+
 function paintStyle(col, row, value) {
   if (drawStyle === 'col' && (currentTool === 'pen' || currentTool === 'erase')) {
+    const {c1, c2} = brushColRange(col);
     if (detectLine) {
       const snap = cells.map(r => [...r]);
-      const {c1, c2} = brushColRange(col);
       for (let r = row; r >= 0; r--) {
         if (snapshotHasFilledInCols(snap, r, c1, c2)) break;
-        paintBrush(col, r, value);
+        paintRow(r, c1, c2, value);
       }
       for (let r = row + 1; r < rows; r++) {
         if (snapshotHasFilledInCols(snap, r, c1, c2)) break;
-        paintBrush(col, r, value);
+        paintRow(r, c1, c2, value);
       }
     } else {
-      for (let r = 0; r < rows; r++) paintBrush(col, r, value);
+      for (let r = 0; r < rows; r++) paintRow(r, c1, c2, value);
     }
   } else if (drawStyle === 'row' && (currentTool === 'pen' || currentTool === 'erase')) {
+    const {r1, r2} = brushRowRange(row);
     if (detectLine) {
       const snap = cells.map(r => [...r]);
-      const {r1, r2} = brushRowRange(row);
       for (let c = col; c >= 0; c--) {
         if (snapshotHasFilledInRows(snap, c, r1, r2)) break;
-        paintBrush(c, row, value);
+        paintCol(c, r1, r2, value);
       }
       for (let c = col + 1; c < cols; c++) {
         if (snapshotHasFilledInRows(snap, c, r1, r2)) break;
-        paintBrush(c, row, value);
+        paintCol(c, r1, r2, value);
       }
     } else {
-      for (let c = 0; c < cols; c++) paintBrush(c, row, value);
+      for (let c = 0; c < cols; c++) paintCol(c, r1, r2, value);
     }
   } else {
     paintBrush(col, row, value);
