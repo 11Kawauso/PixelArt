@@ -332,10 +332,29 @@ cOv.addEventListener('mouseleave',() => {
   statPos.textContent = '—';
 });
 
-// タッチ対応
+// タッチ対応（1本指：描画、2本指：ピンチズーム）
+let pinchStartDist = 0;
+let pinchStartZoom = 1;
+let isPinching = false;
+
+function getTouchDist(e) {
+  const t0 = e.touches[0], t1 = e.touches[1];
+  const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 cOv.addEventListener('touchstart', e => {
   e.preventDefault();
+  if (e.touches.length >= 2) {
+    isPainting = false;
+    lastCell = null;
+    isPinching = true;
+    pinchStartDist = getTouchDist(e);
+    pinchStartZoom = zoom;
+    return;
+  }
   if (!started) return;
+  isPinching = false;
   pushHistory();
   isPainting = true;
   const t = e.touches[0];
@@ -344,8 +363,15 @@ cOv.addEventListener('touchstart', e => {
   applyToolSingle(col, row);
   drawCells();
 }, {passive: false});
+
 cOv.addEventListener('touchmove', e => {
   e.preventDefault();
+  if (isPinching && e.touches.length >= 2) {
+    const dist = getTouchDist(e);
+    const scale = dist / pinchStartDist;
+    setZoom(pinchStartZoom * scale);
+    return;
+  }
   if (!isPainting || !started) return;
   const t = e.touches[0];
   const {col, row} = getCell(t);
@@ -353,7 +379,11 @@ cOv.addEventListener('touchmove', e => {
   applyToolLine(lastCell.col, lastCell.row, col, row);
   lastCell = {col, row};
 }, {passive: false});
-cOv.addEventListener('touchend', () => { isPainting = false; lastCell = null; });
+
+cOv.addEventListener('touchend', e => {
+  if (e.touches.length < 2) isPinching = false;
+  if (e.touches.length === 0) { isPainting = false; lastCell = null; }
+});
 
 // ── ヒストリー ────────────────────────────────────────
 function pushHistory() {
