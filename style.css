@@ -344,9 +344,9 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   text-align: center;
   min-width: 240px;
 }
-.confirm-modal.modal-bottom {
-  align-items: flex-end;
-  padding-bottom: 15vh;
+.confirm-modal.modal-top {
+  align-items: flex-start;
+  padding-top: 10vh;
 }
 .confirm-card p { font-size: 13px; margin-bottom: 14px; }
 .color-pick-input {
