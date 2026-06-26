@@ -1244,6 +1244,15 @@ document.addEventListener('mouseup', () => {
   savedPanelWidth = panel.offsetWidth;
 });
 
+// ── 背景色切替 ────────────────────────────────────────
+document.querySelectorAll('.bg-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('.bg-btn').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    canvasArea.style.background = b.dataset.bg;
+  });
+});
+
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();
 buildCustomPalette();

@@ -43,6 +43,26 @@ header {
 header h1 { font-size: 14px; font-weight: 500; letter-spacing: 0.02em; }
 .header-sep { flex: 1; }
 
+/* 背景切替 */
+.bg-switcher {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.bg-btn {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.bg-btn:hover { transform: scale(1.15); }
+.bg-btn:active { transform: scale(1); }
+.bg-btn.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+
 /* ── ボタン共通 ── */
 button {
   font-family: inherit;
