@@ -45,9 +45,10 @@
     <!-- 選択 -->
     <div class="panel-section" id="selection-section">
       <div class="panel-label">選択</div>
-      <div class="tool-grid">
-        <button class="sel-btn" id="btn-sel-range">📐 範囲選択</button>
-        <button class="sel-btn" id="btn-sel-color">🎨 色選択</button>
+      <div class="tool-grid" style="grid-template-columns:1fr 1fr 1fr;">
+        <button class="sel-btn" id="btn-sel-range">📐 範囲</button>
+        <button class="sel-btn" id="btn-sel-color">🎨 色</button>
+        <button class="sel-btn" id="btn-sel-flood">💧 隣接色</button>
       </div>
       <button id="btn-sel-clear" class="danger" style="width:100%; margin-top:6px; display:none;">選択解除</button>
     </div>

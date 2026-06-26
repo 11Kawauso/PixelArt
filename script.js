@@ -358,6 +358,12 @@ cOv.addEventListener('mousedown', e => {
     updateSelectionButtons();
     return;
   }
+  if (selectionMode === 'flood') {
+    applyFloodSelection(col, row);
+    selectionMode = 'none';
+    updateSelectionButtons();
+    return;
+  }
   pushHistory();
   isPainting = true;
   lastCell = {col, row};
@@ -636,11 +642,13 @@ document.getElementById('btn-confirm-no').addEventListener('click', () => {
 // ── 選択機能 ──────────────────────────────────────────
 const btnSelRange = document.getElementById('btn-sel-range');
 const btnSelColor = document.getElementById('btn-sel-color');
+const btnSelFlood = document.getElementById('btn-sel-flood');
 const btnSelClear = document.getElementById('btn-sel-clear');
 
 function updateSelectionButtons() {
   btnSelRange.classList.toggle('active', selectionMode === 'range');
   btnSelColor.classList.toggle('active', selectionMode === 'color');
+  btnSelFlood.classList.toggle('active', selectionMode === 'flood');
   btnSelClear.style.display = selectionMask ? '' : 'none';
   const ctx = cOv.getContext('2d');
   ctx.clearRect(0, 0, cOv.width, cOv.height);
@@ -664,6 +672,22 @@ function applyColorSelection(col, row) {
   selectionMask = Array.from({length: rows}, (_, r) =>
     Array.from({length: cols}, (_, c) => cells[r][c] === targetColor)
   );
+  updateSelectionButtons();
+}
+
+function applyFloodSelection(col, row) {
+  if (col < 0 || col >= cols || row < 0 || row >= rows) return;
+  const targetColor = cells[row][col];
+  selectionMask = Array.from({length: rows}, () => Array(cols).fill(false));
+  const stack = [[col, row]];
+  while (stack.length) {
+    const [c, r] = stack.pop();
+    if (c < 0 || c >= cols || r < 0 || r >= rows) continue;
+    if (selectionMask[r][c]) continue;
+    if (cells[r][c] !== targetColor) continue;
+    selectionMask[r][c] = true;
+    stack.push([c+1,r],[c-1,r],[c,r+1],[c,r-1]);
+  }
   updateSelectionButtons();
 }
 
@@ -702,6 +726,13 @@ btnSelRange.addEventListener('click', () => {
 btnSelColor.addEventListener('click', () => {
   if (selectionMode === 'color') { clearSelection(); return; }
   selectionMode = 'color';
+  selectionMask = null;
+  updateSelectionButtons();
+});
+
+btnSelFlood.addEventListener('click', () => {
+  if (selectionMode === 'flood') { clearSelection(); return; }
+  selectionMode = 'flood';
   selectionMask = null;
   updateSelectionButtons();
 });
