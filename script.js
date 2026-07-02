@@ -336,26 +336,40 @@ function applyToolSingle(col, row) {
 }
 
 // ── テンプレート図形 ──────────────────────────────────
-// ハートは「左右の丸(山) 2つ + 下の三角形」の組み合わせで構成する。
-// 丸の間隔を半径に近づけるほど中央のくぼみが深くなる。
-function isInsideHeart(u, v) {
-  const lobeR = 0.5;
-  const lobeCX = 0.46;
-  const lobeCV = -0.28;
-  const apexV = 0.95;
-  const baseHalfW = lobeCX + lobeR;
-
-  const dx1 = u - lobeCX, dy1 = v - lobeCV;
-  if (dx1 * dx1 + dy1 * dy1 <= lobeR * lobeR) return true;
-  const dx2 = u + lobeCX, dy2 = v - lobeCV;
-  if (dx2 * dx2 + dy2 * dy2 <= lobeR * lobeR) return true;
-
-  if (v >= lobeCV && v <= apexV) {
-    const t = (v - lobeCV) / (apexV - lobeCV);
-    const halfW = baseHalfW * (1 - t);
-    if (Math.abs(u) <= halfW) return true;
+// 定番のハート曲線（x=16sin³t, y=13cost-5cos2t-2cos3t-cos4t）を
+// u,v それぞれ -1..1 に正規化したポリゴンとして用意し、内外判定する。
+const HEART_POLYGON = (() => {
+  const N = 36;
+  const raw = [];
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2;
+    const x = 16 * Math.pow(Math.sin(t), 3);
+    const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+    raw.push([x, y]);
   }
-  return false;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const [x, y] of raw) {
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+  }
+  // y の最小値（曲線の先端）が v=+1（キャンバス下方向）にくるよう反転する
+  return raw.map(([x, y]) => [
+    ((x - minX) / (maxX - minX)) * 2 - 1,
+    -(((y - minY) / (maxY - minY)) * 2 - 1),
+  ]);
+})();
+
+function isInsideHeart(u, v) {
+  let inside = false;
+  const pts = HEART_POLYGON;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [ui, vi] = pts[i];
+    const [uj, vj] = pts[j];
+    if ((vi > v) !== (vj > v) && u < (uj - ui) * (v - vi) / (vj - vi) + ui) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }
 
 function isInsideShape(type, u, v) {
