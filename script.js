@@ -399,8 +399,33 @@ function buildShapeMask(type, minC, minR, maxC, maxR) {
       mask[r][c] = isInsideShape(type, u, v);
     }
   }
-  if (type === 'heart') patchHeartTip(mask);
+  if (type === 'heart') {
+    patchHeartNotch(mask);
+    patchHeartTip(mask);
+  }
   return mask;
+}
+
+// くぼみを深くするほど、山と山の間の隙間が2マス幅程度のまま
+// 何行も続いてしまい、穴が開いたように見える。隙間が十分狭くなった
+// 時点で即座に塗りつぶし、くぼみをすっきり閉じる。
+function patchHeartNotch(mask) {
+  const h = mask.length;
+  if (!h) return;
+  const w = mask[0].length;
+  for (let r = 0; r < h; r++) {
+    const row = mask[r];
+    let first = -1, last = -1;
+    for (let c = 0; c < w; c++) {
+      if (row[c]) { if (first < 0) first = c; last = c; }
+    }
+    if (first < 0) continue;
+    const gapCells = [];
+    for (let c = first; c <= last; c++) if (!row[c]) gapCells.push(c);
+    if (gapCells.length === 0 || gapCells.length > 2) continue;
+    // 隙間が十分狭い行は即座に塗りつぶして閉じる（行ごとに判定し、途中で止めない）
+    for (const c of gapCells) row[c] = true;
+  }
 }
 
 // ハートの先端は数学的には1点に収束するため、粗いグリッドだと
