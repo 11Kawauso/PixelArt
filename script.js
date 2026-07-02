@@ -357,10 +357,9 @@ const HEART_POLYGON = (() => {
     ((x - minX) / (maxX - minX)) * 2 - 1,
     -(((y - minY) / (maxY - minY)) * 2 - 1),
   ]);
-  // このカーブは山と山の間のくぼみ(谷)が全体の上から2割程度の浅い位置にあり、
-  // 見た目のくぼみが浅く感じられるため、谷から上（山側）を伸ばして谷をより深く見せる。
+  // 谷から上（山側）をわずかに伸ばし、くぼみを少しだけ強調する（やりすぎない程度に）。
   const notchV = normalized[0][1]; // t=0 の点（谷の頂点）
-  const targetNotchV = -0.15;
+  const targetNotchV = notchV + 0.1;
   return normalized.map(([u, v]) => {
     if (v <= notchV) {
       const t = (v - (-1)) / (notchV - (-1));
@@ -406,7 +405,7 @@ function buildShapeMask(type, minC, minR, maxC, maxR) {
 
 // ハートの先端は数学的には1点に収束するため、粗いグリッドだと
 // 中心セルの幅より細くなり、先端付近の行が丸ごと空になってしまう。
-// 空になった末尾の行に中心列を1マスだけ塗り、先端まで途切れず尖らせる。
+// 空になった末尾の行を中央2マスで塗り、鋭く尖らせすぎず丸みを持たせて先端までつなげる。
 function patchHeartTip(mask) {
   const h = mask.length;
   if (!h) return;
@@ -415,6 +414,7 @@ function patchHeartTip(mask) {
   for (let r = h - 1; r >= 0; r--) {
     if (mask[r].some(v => v)) break;
     mask[r][centerCol] = true;
+    if (centerCol + 1 < w) mask[r][centerCol + 1] = true;
   }
 }
 
