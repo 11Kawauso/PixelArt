@@ -31,6 +31,9 @@ let selectionMask = null;   // null = all editable, or bool[][]
 let rangeStart = null;
 let rangeSelectMode = 'rect'; // 'rect' = 四角で囲う, 'free' = 自分で指定
 let rangePath = [];
+let shapeType = 'circle'; // 'circle', 'rect', 'heart'
+let shapeFill = true;
+let shapeStart = null;
 
 // ── DOM ───────────────────────────────────────────────
 const cBg  = document.getElementById('canvas-bg');
@@ -332,6 +335,94 @@ function applyToolSingle(col, row) {
   }
 }
 
+// ── テンプレート図形 ──────────────────────────────────
+function isInsideHeart(u, v) {
+  // u, v は -1..1（vはキャンバス下方向が正）。ハートの先端が下、山が上にくるよう変換する。
+  const x = u * 1.3;
+  const y = -(v * 1.3) + 0.2;
+  return Math.pow(x * x + y * y - 1, 3) - x * x * y * y * y <= 0;
+}
+
+function isInsideShape(type, u, v) {
+  if (type === 'circle') return u * u + v * v <= 1;
+  if (type === 'heart') return isInsideHeart(u, v);
+  return true; // rect：バウンディングボックス全体
+}
+
+function buildShapeMask(type, minC, minR, maxC, maxR) {
+  const w = maxC - minC + 1, h = maxR - minR + 1;
+  const mask = Array.from({length: h}, () => Array(w).fill(false));
+  for (let r = 0; r < h; r++) {
+    const v = ((r + 0.5) / h) * 2 - 1;
+    for (let c = 0; c < w; c++) {
+      const u = ((c + 0.5) / w) * 2 - 1;
+      mask[r][c] = isInsideShape(type, u, v);
+    }
+  }
+  return mask;
+}
+
+function toOutlineMask(mask) {
+  const h = mask.length, w = mask[0].length;
+  const outline = Array.from({length: h}, () => Array(w).fill(false));
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (!mask[r][c]) continue;
+      const hasEmptyNeighbor =
+        !(mask[r - 1] && mask[r - 1][c]) ||
+        !(mask[r + 1] && mask[r + 1][c]) ||
+        !mask[r][c - 1] ||
+        !mask[r][c + 1];
+      outline[r][c] = hasEmptyNeighbor;
+    }
+  }
+  return outline;
+}
+
+function shapeBounds(c1, r1, c2, r2) {
+  return {
+    minC: Math.max(0, Math.min(c1, c2)),
+    maxC: Math.min(cols - 1, Math.max(c1, c2)),
+    minR: Math.max(0, Math.min(r1, r2)),
+    maxR: Math.min(rows - 1, Math.max(r1, r2)),
+  };
+}
+
+function applyShapeToCells(type, fill, c1, r1, c2, r2) {
+  const {minC, maxC, minR, maxR} = shapeBounds(c1, r1, c2, r2);
+  if (minC > maxC || minR > maxR) return;
+  let mask = buildShapeMask(type, minC, minR, maxC, maxR);
+  if (!fill) mask = toOutlineMask(mask);
+  for (let r = minR; r <= maxR; r++) {
+    for (let c = minC; c <= maxC; c++) {
+      if (mask[r - minR][c - minC] && isCellEditable(r, c)) {
+        cells[r][c] = currentColor;
+      }
+    }
+  }
+}
+
+function drawShapePreview(type, fill, c1, r1, c2, r2) {
+  const px = cellPx();
+  const ctx = cOv.getContext('2d');
+  ctx.clearRect(0, 0, cOv.width, cOv.height);
+  const {minC, maxC, minR, maxR} = shapeBounds(c1, r1, c2, r2);
+  if (minC > maxC || minR > maxR) return;
+  let mask = buildShapeMask(type, minC, minR, maxC, maxR);
+  if (!fill) mask = toOutlineMask(mask);
+  ctx.fillStyle = 'rgba(59,130,246,0.5)';
+  for (let r = minR; r <= maxR; r++) {
+    for (let c = minC; c <= maxC; c++) {
+      if (mask[r - minR][c - minC]) ctx.fillRect(c * px, r * px, px, px);
+    }
+  }
+  ctx.strokeStyle = 'rgba(59,130,246,0.8)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(minC * px + 0.5, minR * px + 0.5, (maxC - minC + 1) * px - 1, (maxR - minR + 1) * px - 1);
+  ctx.setLineDash([]);
+}
+
 function floodFill(startCol, startRow, newColor) {
   if (!isCellEditable(startRow, startCol)) return;
   const target = cells[startRow][startCol];
@@ -367,6 +458,10 @@ cOv.addEventListener('mousedown', e => {
     updateSelectionButtons();
     return;
   }
+  if (currentTool === 'shape') {
+    shapeStart = {col, row};
+    return;
+  }
   pushHistory();
   isPainting = true;
   lastCell = {col, row};
@@ -391,6 +486,11 @@ cOv.addEventListener('mousemove', e => {
     }
     return;
   }
+  if (currentTool === 'shape' && shapeStart) {
+    drawShapePreview(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
+    statPos.textContent = `${col+1}, ${row+1}`;
+    return;
+  }
   drawOverlayCell(col, row);
   statPos.textContent = `${col+1}, ${row+1}`;
   const c = cells[row] && cells[row][col];
@@ -412,6 +512,17 @@ document.addEventListener('mouseup', e => {
     rangePath = [];
     selectionMode = 'none';
     updateSelectionButtons();
+    return;
+  }
+  if (currentTool === 'shape' && shapeStart) {
+    const {col, row} = getCell(e);
+    pushHistory();
+    applyShapeToCells(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
+    shapeStart = null;
+    drawCells();
+    const ctx = cOv.getContext('2d');
+    ctx.clearRect(0, 0, cOv.width, cOv.height);
+    drawSelectionOverlay(ctx);
     return;
   }
   isPainting = false; lastCell = null;
@@ -883,9 +994,48 @@ function setTool(t) {
     b.classList.toggle('active', b.dataset.tool === t);
   });
   updateDrawStyleVisibility();
+  updateShapeMenuUI();
 }
 document.querySelectorAll('.tool-btn').forEach(b => {
   b.addEventListener('click', () => setTool(b.dataset.tool));
+});
+
+// ── テンプレート図形メニュー ──────────────────────────
+const shapeMenu = document.getElementById('shape-menu');
+const shapeMenuBtn = document.getElementById('btn-shape-menu');
+const shapeMenuDropdown = document.getElementById('shape-menu-dropdown');
+
+function updateShapeMenuUI() {
+  shapeMenuBtn.classList.toggle('active', currentTool === 'shape');
+  document.querySelectorAll('.shape-opt').forEach(b => {
+    const matches = currentTool === 'shape' && b.dataset.shape === shapeType && (b.dataset.fill === '1') === shapeFill;
+    b.classList.toggle('active', matches);
+  });
+}
+
+function closeShapeMenu() {
+  shapeMenuDropdown.style.display = 'none';
+}
+
+shapeMenuBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  shapeMenuDropdown.style.display = shapeMenuDropdown.style.display === 'none' ? 'flex' : 'none';
+});
+
+document.querySelectorAll('.shape-opt').forEach(b => {
+  b.addEventListener('click', () => {
+    shapeType = b.dataset.shape;
+    shapeFill = b.dataset.fill === '1';
+    currentTool = 'shape';
+    document.querySelectorAll('.tool-btn').forEach(x => x.classList.remove('active'));
+    updateDrawStyleVisibility();
+    updateShapeMenuUI();
+    closeShapeMenu();
+  });
+});
+
+document.addEventListener('click', e => {
+  if (!shapeMenu.contains(e.target)) closeShapeMenu();
 });
 
 // ── グリッドサイズ ────────────────────────────────────
