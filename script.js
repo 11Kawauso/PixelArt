@@ -353,10 +353,22 @@ const HEART_POLYGON = (() => {
     minY = Math.min(minY, y); maxY = Math.max(maxY, y);
   }
   // y の最小値（曲線の先端）が v=+1（キャンバス下方向）にくるよう反転する
-  return raw.map(([x, y]) => [
+  const normalized = raw.map(([x, y]) => [
     ((x - minX) / (maxX - minX)) * 2 - 1,
     -(((y - minY) / (maxY - minY)) * 2 - 1),
   ]);
+  // このカーブは山と山の間のくぼみ(谷)が全体の上から2割程度の浅い位置にあり、
+  // 見た目のくぼみが浅く感じられるため、谷から上（山側）を伸ばして谷をより深く見せる。
+  const notchV = normalized[0][1]; // t=0 の点（谷の頂点）
+  const targetNotchV = -0.15;
+  return normalized.map(([u, v]) => {
+    if (v <= notchV) {
+      const t = (v - (-1)) / (notchV - (-1));
+      return [u, -1 + t * (targetNotchV - (-1))];
+    }
+    const t = (v - notchV) / (1 - notchV);
+    return [u, targetNotchV + t * (1 - targetNotchV)];
+  });
 })();
 
 function isInsideHeart(u, v) {
@@ -388,7 +400,22 @@ function buildShapeMask(type, minC, minR, maxC, maxR) {
       mask[r][c] = isInsideShape(type, u, v);
     }
   }
+  if (type === 'heart') patchHeartTip(mask);
   return mask;
+}
+
+// ハートの先端は数学的には1点に収束するため、粗いグリッドだと
+// 中心セルの幅より細くなり、先端付近の行が丸ごと空になってしまう。
+// 空になった末尾の行に中心列を1マスだけ塗り、先端まで途切れず尖らせる。
+function patchHeartTip(mask) {
+  const h = mask.length;
+  if (!h) return;
+  const w = mask[0].length;
+  const centerCol = Math.floor((w - 1) / 2);
+  for (let r = h - 1; r >= 0; r--) {
+    if (mask[r].some(v => v)) break;
+    mask[r][centerCol] = true;
+  }
 }
 
 function toOutlineMask(mask) {
