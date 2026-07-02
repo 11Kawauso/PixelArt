@@ -357,9 +357,9 @@ const HEART_POLYGON = (() => {
     ((x - minX) / (maxX - minX)) * 2 - 1,
     -(((y - minY) / (maxY - minY)) * 2 - 1),
   ]);
-  // 谷から上（山側）をわずかに伸ばし、くぼみを少しだけ強調する（やりすぎない程度に）。
+  // 谷から上（山側）を伸ばし、くぼみを深めに強調する。
   const notchV = normalized[0][1]; // t=0 の点（谷の頂点）
-  const targetNotchV = notchV + 0.1;
+  const targetNotchV = -0.2;
   return normalized.map(([u, v]) => {
     if (v <= notchV) {
       const t = (v - (-1)) / (notchV - (-1));
