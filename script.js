@@ -353,21 +353,10 @@ const HEART_POLYGON = (() => {
     minY = Math.min(minY, y); maxY = Math.max(maxY, y);
   }
   // y の最小値（曲線の先端）が v=+1（キャンバス下方向）にくるよう反転する
-  const normalized = raw.map(([x, y]) => [
+  return raw.map(([x, y]) => [
     ((x - minX) / (maxX - minX)) * 2 - 1,
     -(((y - minY) / (maxY - minY)) * 2 - 1),
   ]);
-  // 谷から上（山側）を伸ばし、くぼみを深めに強調する。
-  const notchV = normalized[0][1]; // t=0 の点（谷の頂点）
-  const targetNotchV = -0.2;
-  return normalized.map(([u, v]) => {
-    if (v <= notchV) {
-      const t = (v - (-1)) / (notchV - (-1));
-      return [u, -1 + t * (targetNotchV - (-1))];
-    }
-    const t = (v - notchV) / (1 - notchV);
-    return [u, targetNotchV + t * (1 - targetNotchV)];
-  });
 })();
 
 function isInsideHeart(u, v) {
@@ -406,9 +395,8 @@ function buildShapeMask(type, minC, minR, maxC, maxR) {
   return mask;
 }
 
-// くぼみを深くするほど、山と山の間の隙間が2マス幅程度のまま
-// 何行も続いてしまい、穴が開いたように見える。隙間が十分狭くなった
-// 時点で即座に塗りつぶし、くぼみをすっきり閉じる。
+// 粗いグリッドでは山と山の間の隙間が2マス幅程度のまま数行続くことがあり、
+// 穴が開いたように見える。隙間が十分狭くなった行は即座に塗りつぶして閉じる。
 function patchHeartNotch(mask) {
   const h = mask.length;
   if (!h) return;
