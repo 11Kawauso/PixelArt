@@ -340,7 +340,8 @@ function isInsideHeart(u, v) {
   // u, v は -1..1（vはキャンバス下方向が正）。ハートの先端が下、山が上にくるよう変換する。
   const x = u * 1.3;
   const y = -(v * 1.3) + 0.2;
-  return Math.pow(x * x + y * y - 1, 3) - x * x * y * y * y <= 0;
+  // 係数を上げるほど山の頂点が高くなり、中央のくぼみが相対的に深くなる
+  return Math.pow(x * x + y * y - 1, 3) - 2 * x * x * y * y * y <= 0;
 }
 
 function isInsideShape(type, u, v) {

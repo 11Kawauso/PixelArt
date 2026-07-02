@@ -574,7 +574,7 @@ input, select, textarea {
 .shape-menu {
   position: fixed;
   top: 56px;
-  right: 12px;
+  right: 28px;
   z-index: 60;
 }
 .shape-menu-btn {
