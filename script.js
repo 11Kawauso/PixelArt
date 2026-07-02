@@ -336,12 +336,26 @@ function applyToolSingle(col, row) {
 }
 
 // ── テンプレート図形 ──────────────────────────────────
+// ハートは「左右の丸(山) 2つ + 下の三角形」の組み合わせで構成する。
+// 丸の間隔を半径に近づけるほど中央のくぼみが深くなる。
 function isInsideHeart(u, v) {
-  // u, v は -1..1（vはキャンバス下方向が正）。ハートの先端が下、山が上にくるよう変換する。
-  const x = u * 1.3;
-  const y = -(v * 1.3) + 0.2;
-  // 係数を上げるほど山の頂点が高くなり、中央のくぼみが相対的に深くなる
-  return Math.pow(x * x + y * y - 1, 3) - 2 * x * x * y * y * y <= 0;
+  const lobeR = 0.5;
+  const lobeCX = 0.46;
+  const lobeCV = -0.28;
+  const apexV = 0.95;
+  const baseHalfW = lobeCX + lobeR;
+
+  const dx1 = u - lobeCX, dy1 = v - lobeCV;
+  if (dx1 * dx1 + dy1 * dy1 <= lobeR * lobeR) return true;
+  const dx2 = u + lobeCX, dy2 = v - lobeCV;
+  if (dx2 * dx2 + dy2 * dy2 <= lobeR * lobeR) return true;
+
+  if (v >= lobeCV && v <= apexV) {
+    const t = (v - lobeCV) / (apexV - lobeCV);
+    const halfW = baseHalfW * (1 - t);
+    if (Math.abs(u) <= halfW) return true;
+  }
+  return false;
 }
 
 function isInsideShape(type, u, v) {
