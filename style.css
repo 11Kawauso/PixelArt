@@ -113,6 +113,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   overflow-x: hidden;
   scrollbar-width: none;
   touch-action: pan-y;
+  transition: width 0.22s ease, transform 0.22s ease;
 }
 .panel::-webkit-scrollbar {
   display: none;
@@ -122,6 +123,9 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   border-right-color: transparent;
   overflow: hidden;
 }
+.panel.no-transition {
+  transition: none;
+}
 
 /* リサイズハンドル */
 .panel-resize {
@@ -129,7 +133,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   flex-shrink: 0;
   cursor: col-resize;
   background: transparent;
-  transition: background 0.15s;
+  transition: background 0.15s, width 0.22s ease;
   position: relative;
   z-index: 5;
 }
@@ -161,7 +165,7 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.1s;
+  transition: background 0.1s, left 0.22s ease;
 }
 .panel-toggle:hover {
   background: var(--bg);
@@ -520,6 +524,7 @@ input, select, textarea {
   display: flex;
   align-items: end;
   gap: 5px;
+  transition: left 0.22s ease;
 }
 .color-dot {
   border-radius: 50%;
@@ -630,7 +635,8 @@ input, select, textarea {
     box-shadow: 4px 0 24px rgba(0,0,0,0.15);
   }
   .panel.collapsed {
-    display: none;
+    width: 280px !important;
+    transform: translateX(-100%);
   }
 
   /* リサイズハンドル非表示 */
@@ -638,14 +644,18 @@ input, select, textarea {
 
   /* 背景オーバーレイ */
   .panel-backdrop {
-    display: none;
+    display: block;
     position: fixed;
     inset: 0;
     z-index: 99;
     background: rgba(0,0,0,0.3);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
   }
   .panel-backdrop.visible {
-    display: block;
+    opacity: 1;
+    pointer-events: auto;
   }
 
   /* トグルボタン */

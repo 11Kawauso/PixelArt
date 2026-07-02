@@ -497,9 +497,10 @@ document.getElementById('btn-undo').addEventListener('click', undo);
 
 // ── 色履歴の位置更新 ──────────────────────────────────
 const colorHistoryEl = document.getElementById('color-history');
-function updateColorHistoryPos() {
+function updateColorHistoryPos(panelEdge) {
   const rect = canvasArea.getBoundingClientRect();
-  colorHistoryEl.style.left = (rect.left + 10) + 'px';
+  const left = panelEdge != null ? panelEdge : rect.left;
+  colorHistoryEl.style.left = (left + 10) + 'px';
   colorHistoryEl.style.bottom = (window.innerHeight - rect.bottom + 30) + 'px';
 }
 window.addEventListener('resize', updateColorHistoryPos);
@@ -1213,13 +1214,15 @@ function syncTogglePosition() {
   if (isMobile()) {
     panelToggle.style.left = '0px';
     panelBackdrop.classList.toggle('visible', !panelCollapsed);
+    updateColorHistoryPos();
   } else {
-    const w = panel.getBoundingClientRect().width;
+    // パネルはトランジション中のため、実測値ではなく指定済みの目標幅を使う
+    const w = panelCollapsed ? 0 : (parseFloat(panel.style.width) || panel.getBoundingClientRect().width);
     const handleW = panelCollapsed ? 0 : 4;
     panelToggle.style.left = (w + handleW) + 'px';
     panelBackdrop.classList.remove('visible');
+    updateColorHistoryPos(w + handleW);
   }
-  updateColorHistoryPos();
 }
 
 function togglePanel() {
@@ -1257,6 +1260,7 @@ panelResize.addEventListener('mousedown', e => {
   if (isMobile()) return;
   e.preventDefault();
   isResizing = true;
+  panel.classList.add('no-transition');
   panelResize.classList.add('dragging');
   document.body.style.cursor = 'col-resize';
   document.body.style.userSelect = 'none';
@@ -1274,6 +1278,7 @@ document.addEventListener('mousemove', e => {
 document.addEventListener('mouseup', () => {
   if (!isResizing) return;
   isResizing = false;
+  panel.classList.remove('no-transition');
   panelResize.classList.remove('dragging');
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
