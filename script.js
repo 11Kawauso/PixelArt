@@ -29,6 +29,8 @@ let detectLine = false;
 let selectionMode = 'none'; // 'none', 'range', 'color'
 let selectionMask = null;   // null = all editable, or bool[][]
 let rangeStart = null;
+let rangeSelectMode = 'rect'; // 'rect' = 四角で囲う, 'free' = 自分で指定
+let rangePath = [];
 
 // ── DOM ───────────────────────────────────────────────
 const cBg  = document.getElementById('canvas-bg');
@@ -350,6 +352,7 @@ cOv.addEventListener('mousedown', e => {
   const {col, row} = getCell(e);
   if (selectionMode === 'range') {
     rangeStart = {col, row};
+    rangePath = [{col, row}];
     return;
   }
   if (selectionMode === 'color') {
@@ -374,7 +377,18 @@ cOv.addEventListener('mousemove', e => {
   if (!started) return;
   const {col, row} = getCell(e);
   if (selectionMode === 'range' && rangeStart) {
-    drawRangePreview(rangeStart.col, rangeStart.row, col, row);
+    if (rangeSelectMode === 'free') {
+      const last = rangePath[rangePath.length - 1];
+      if (last.col !== col || last.row !== row) {
+        for (const p of interpolateCells(last.col, last.row, col, row)) {
+          const lp = rangePath[rangePath.length - 1];
+          if (!lp || lp.col !== p.col || lp.row !== p.row) rangePath.push(p);
+        }
+      }
+      drawFreeRangePreview(rangePath, col, row);
+    } else {
+      drawRangePreview(rangeStart.col, rangeStart.row, col, row);
+    }
     return;
   }
   drawOverlayCell(col, row);
@@ -389,8 +403,13 @@ cOv.addEventListener('mousemove', e => {
 document.addEventListener('mouseup', e => {
   if (selectionMode === 'range' && rangeStart) {
     const {col, row} = getCell(e);
-    applyRangeSelection(rangeStart.col, rangeStart.row, col, row);
+    if (rangeSelectMode === 'free') {
+      applyFreeRangeSelection(rangePath, col, row);
+    } else {
+      applyRangeSelection(rangeStart.col, rangeStart.row, col, row);
+    }
     rangeStart = null;
+    rangePath = [];
     selectionMode = 'none';
     updateSelectionButtons();
     return;
@@ -645,16 +664,34 @@ const btnSelRange = document.getElementById('btn-sel-range');
 const btnSelColor = document.getElementById('btn-sel-color');
 const btnSelFlood = document.getElementById('btn-sel-flood');
 const btnSelClear = document.getElementById('btn-sel-clear');
+const rangeModeRow = document.getElementById('range-mode-row');
+const btnRangeRect = document.getElementById('btn-range-rect');
+const btnRangeFree = document.getElementById('btn-range-free');
+const rangeAutoCloseLabel = document.getElementById('range-autoclose-label');
+const rangeAutoCloseCheckbox = document.getElementById('range-autoclose');
 
 function updateSelectionButtons() {
   btnSelRange.classList.toggle('active', selectionMode === 'range');
   btnSelColor.classList.toggle('active', selectionMode === 'color');
   btnSelFlood.classList.toggle('active', selectionMode === 'flood');
   btnSelClear.style.display = selectionMask ? '' : 'none';
+  rangeModeRow.style.display = selectionMode === 'range' ? '' : 'none';
+  rangeAutoCloseLabel.style.display = (selectionMode === 'range' && rangeSelectMode === 'free') ? 'flex' : 'none';
+  btnRangeRect.classList.toggle('active', rangeSelectMode === 'rect');
+  btnRangeFree.classList.toggle('active', rangeSelectMode === 'free');
   const ctx = cOv.getContext('2d');
   ctx.clearRect(0, 0, cOv.width, cOv.height);
   drawSelectionOverlay(ctx);
 }
+
+btnRangeRect.addEventListener('click', () => {
+  rangeSelectMode = 'rect';
+  updateSelectionButtons();
+});
+btnRangeFree.addEventListener('click', () => {
+  rangeSelectMode = 'free';
+  updateSelectionButtons();
+});
 
 function applyRangeSelection(c1, r1, c2, r2) {
   const minC = Math.max(0, Math.min(c1, c2));
@@ -692,6 +729,69 @@ function applyFloodSelection(col, row) {
   updateSelectionButtons();
 }
 
+function applyFreeRangeSelection(path, endCol, endRow) {
+  if (!path.length) return;
+  const start = path[0];
+  const releasedAtStart = endCol === start.col && endRow === start.row;
+  if (!releasedAtStart && !rangeAutoCloseCheckbox.checked) {
+    // 始点に戻らず終了したので選択を確定しない
+    return;
+  }
+  const traced = Array.from({length: rows}, () => Array(cols).fill(false));
+  const markCell = (c, r) => { if (c >= 0 && c < cols && r >= 0 && r < rows) traced[r][c] = true; };
+  for (const p of path) markCell(p.col, p.row);
+  if (!releasedAtStart) {
+    for (const p of interpolateCells(endCol, endRow, start.col, start.row)) markCell(p.col, p.row);
+  }
+  // 外周からたどれるセルを「外部」とし、なぞった線とそれ以外(内部)を選択対象にする
+  const outside = Array.from({length: rows}, () => Array(cols).fill(false));
+  const stack = [];
+  for (let c = 0; c < cols; c++) { stack.push([c, 0]); stack.push([c, rows - 1]); }
+  for (let r = 0; r < rows; r++) { stack.push([0, r]); stack.push([cols - 1, r]); }
+  while (stack.length) {
+    const [c, r] = stack.pop();
+    if (c < 0 || c >= cols || r < 0 || r >= rows) continue;
+    if (outside[r][c] || traced[r][c]) continue;
+    outside[r][c] = true;
+    stack.push([c + 1, r], [c - 1, r], [c, r + 1], [c, r - 1]);
+  }
+  selectionMask = Array.from({length: rows}, (_, r) =>
+    Array.from({length: cols}, (_, c) => traced[r][c] || !outside[r][c])
+  );
+  updateSelectionButtons();
+}
+
+function drawFreeRangePreview(path, curCol, curRow) {
+  const px = cellPx();
+  const ctx = cOv.getContext('2d');
+  ctx.clearRect(0, 0, cOv.width, cOv.height);
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(0, 0, cOv.width, cOv.height);
+  const cx = c => c * px + px / 2, cy = r => r * px + px / 2;
+  ctx.strokeStyle = 'rgba(59,130,246,0.9)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  path.forEach((p, i) => {
+    if (i === 0) ctx.moveTo(cx(p.col), cy(p.row));
+    else ctx.lineTo(cx(p.col), cy(p.row));
+  });
+  ctx.stroke();
+  const start = path[0];
+  if (rangeAutoCloseCheckbox.checked) {
+    ctx.strokeStyle = 'rgba(59,130,246,0.5)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(cx(curCol), cy(curRow));
+    ctx.lineTo(cx(start.col), cy(start.row));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.fillStyle = 'rgba(59,130,246,0.9)';
+  ctx.beginPath();
+  ctx.arc(cx(start.col), cy(start.row), Math.max(3, px * 0.25), 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function drawRangePreview(c1, r1, c2, r2) {
   const px = cellPx();
   const ctx = cOv.getContext('2d');
@@ -714,6 +814,7 @@ function clearSelection() {
   selectionMask = null;
   selectionMode = 'none';
   rangeStart = null;
+  rangePath = [];
   updateSelectionButtons();
 }
 

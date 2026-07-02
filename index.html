@@ -50,6 +50,14 @@
         <button class="sel-btn" id="btn-sel-color">🎨 色</button>
         <button class="sel-btn" id="btn-sel-flood">💧 隣接色</button>
       </div>
+      <div class="tool-grid" id="range-mode-row" style="grid-template-columns:1fr 1fr; margin-top:6px; display:none;">
+        <button class="sel-btn active" id="btn-range-rect">四角で囲う</button>
+        <button class="sel-btn" id="btn-range-free">自分で指定</button>
+      </div>
+      <label class="detect-line-label" id="range-autoclose-label" style="display:none;" title="オフの場合、始点まで戻らないと選択が確定しません">
+        <input type="checkbox" id="range-autoclose" checked style="accent-color:var(--accent)">
+        始点まで自動でつなぐ
+      </label>
       <button id="btn-sel-clear" class="danger" style="width:100%; margin-top:6px; display:none;">選択解除</button>
     </div>
 
