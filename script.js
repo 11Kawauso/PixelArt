@@ -450,27 +450,27 @@ function toOutlineMask(mask) {
 }
 
 // 枠線を描画サイズ(ブラシサイズ)ぶん太らせる。brushRect と同じ形で
-// 各セルを膨らませることで、ペンツールと同じ太さ感になるようにする。
+// 各セルを膨らませる。太らせた分は図形の元のバウンディングボックスの外に
+// はみ出すことがあるため、配列自体を必要な分だけパディングして拡張し、
+// 端で切り詰められない（平らにならない）ようにする。呼び出し側は返り値の
+// padTop/padLeft を使って元のキャンバス座標に変換する。
 function thickenMask(mask, size) {
-  if (size <= 1) return mask;
   const h = mask.length, w = mask[0].length;
+  if (size <= 1) return {mask, padTop: 0, padLeft: 0};
   const half = Math.floor(size / 2);
-  const result = Array.from({length: h}, () => Array(w).fill(false));
+  const newH = h + size - 1, newW = w + size - 1;
+  const result = Array.from({length: newH}, () => Array(newW).fill(false));
   for (let r = 0; r < h; r++) {
     for (let c = 0; c < w; c++) {
       if (!mask[r][c]) continue;
-      for (let dr = -half; dr <= size - 1 - half; dr++) {
-        const rr = r + dr;
-        if (rr < 0 || rr >= h) continue;
-        for (let dc = -half; dc <= size - 1 - half; dc++) {
-          const cc = c + dc;
-          if (cc < 0 || cc >= w) continue;
-          result[rr][cc] = true;
+      for (let dr = 0; dr < size; dr++) {
+        for (let dc = 0; dc < size; dc++) {
+          result[r + dr][c + dc] = true;
         }
       }
     }
   }
-  return result;
+  return {mask: result, padTop: half, padLeft: half};
 }
 
 function shapeBounds(c1, r1, c2, r2) {
@@ -486,12 +486,18 @@ function applyShapeToCells(type, fill, c1, r1, c2, r2) {
   const {minC, maxC, minR, maxR} = shapeBounds(c1, r1, c2, r2);
   if (minC > maxC || minR > maxR) return;
   let mask = buildShapeMask(type, minC, minR, maxC, maxR);
-  if (!fill) mask = thickenMask(toOutlineMask(mask), brushSize);
-  for (let r = minR; r <= maxR; r++) {
-    for (let c = minC; c <= maxC; c++) {
-      if (mask[r - minR][c - minC] && isCellEditable(r, c)) {
-        cells[r][c] = currentColor;
-      }
+  let padTop = 0, padLeft = 0;
+  if (!fill) {
+    const t = thickenMask(toOutlineMask(mask), brushSize);
+    mask = t.mask; padTop = t.padTop; padLeft = t.padLeft;
+  }
+  for (let r = 0; r < mask.length; r++) {
+    for (let c = 0; c < mask[0].length; c++) {
+      if (!mask[r][c]) continue;
+      const rr = minR + r - padTop, cc = minC + c - padLeft;
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+      if (!isCellEditable(rr, cc)) continue;
+      cells[rr][cc] = currentColor;
     }
   }
 }
@@ -503,11 +509,18 @@ function drawShapePreview(type, fill, c1, r1, c2, r2) {
   const {minC, maxC, minR, maxR} = shapeBounds(c1, r1, c2, r2);
   if (minC > maxC || minR > maxR) return;
   let mask = buildShapeMask(type, minC, minR, maxC, maxR);
-  if (!fill) mask = thickenMask(toOutlineMask(mask), brushSize);
+  let padTop = 0, padLeft = 0;
+  if (!fill) {
+    const t = thickenMask(toOutlineMask(mask), brushSize);
+    mask = t.mask; padTop = t.padTop; padLeft = t.padLeft;
+  }
   ctx.fillStyle = 'rgba(59,130,246,0.5)';
-  for (let r = minR; r <= maxR; r++) {
-    for (let c = minC; c <= maxC; c++) {
-      if (mask[r - minR][c - minC]) ctx.fillRect(c * px, r * px, px, px);
+  for (let r = 0; r < mask.length; r++) {
+    for (let c = 0; c < mask[0].length; c++) {
+      if (!mask[r][c]) continue;
+      const rr = minR + r - padTop, cc = minC + c - padLeft;
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+      ctx.fillRect(cc * px, rr * px, px, px);
     }
   }
   ctx.strokeStyle = 'rgba(59,130,246,0.8)';
@@ -569,12 +582,18 @@ function applyHeartImageToCells(fill, c1, r1, c2, r2) {
   if (minC > maxC || minR > maxR) return;
   const w = maxC - minC + 1, h = maxR - minR + 1;
   let mask = buildImageSilhouetteMask(heartImage, w, h);
-  if (!fill) mask = thickenMask(toOutlineMask(mask), brushSize);
-  for (let r = 0; r < h; r++) {
-    for (let c = 0; c < w; c++) {
-      if (mask[r][c] && isCellEditable(minR + r, minC + c)) {
-        cells[minR + r][minC + c] = currentColor;
-      }
+  let padTop = 0, padLeft = 0;
+  if (!fill) {
+    const t = thickenMask(toOutlineMask(mask), brushSize);
+    mask = t.mask; padTop = t.padTop; padLeft = t.padLeft;
+  }
+  for (let r = 0; r < mask.length; r++) {
+    for (let c = 0; c < mask[0].length; c++) {
+      if (!mask[r][c]) continue;
+      const rr = minR + r - padTop, cc = minC + c - padLeft;
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+      if (!isCellEditable(rr, cc)) continue;
+      cells[rr][cc] = currentColor;
     }
   }
 }
@@ -587,11 +606,18 @@ function drawHeartImagePreview(fill, c1, r1, c2, r2) {
   if (minC > maxC || minR > maxR) return;
   const w = maxC - minC + 1, h = maxR - minR + 1;
   let mask = buildImageSilhouetteMask(heartImage, w, h);
-  if (!fill) mask = thickenMask(toOutlineMask(mask), brushSize);
+  let padTop = 0, padLeft = 0;
+  if (!fill) {
+    const t = thickenMask(toOutlineMask(mask), brushSize);
+    mask = t.mask; padTop = t.padTop; padLeft = t.padLeft;
+  }
   ctx.fillStyle = 'rgba(59,130,246,0.5)';
-  for (let r = 0; r < h; r++) {
-    for (let c = 0; c < w; c++) {
-      if (mask[r][c]) ctx.fillRect((minC + c) * px, (minR + r) * px, px, px);
+  for (let r = 0; r < mask.length; r++) {
+    for (let c = 0; c < mask[0].length; c++) {
+      if (!mask[r][c]) continue;
+      const rr = minR + r - padTop, cc = minC + c - padLeft;
+      if (rr < 0 || rr >= rows || cc < 0 || cc >= cols) continue;
+      ctx.fillRect(cc * px, rr * px, px, px);
     }
   }
   ctx.strokeStyle = 'rgba(59,130,246,0.8)';
