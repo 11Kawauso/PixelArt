@@ -31,7 +31,7 @@ let selectionMask = null;   // null = all editable, or bool[][]
 let rangeStart = null;
 let rangeSelectMode = 'rect'; // 'rect' = 四角で囲う, 'free' = 自分で指定
 let rangePath = [];
-let shapeType = 'circle'; // 'circle', 'rect', 'heart'
+let shapeType = 'circle'; // 'circle', 'rect', 'diamond', 'heart'
 let shapeFill = true;
 let shapeStart = null;
 let heartImage = null; // ハート図形に使う差し替え用の画像（用意されていれば数式の代わりに使う）
@@ -376,6 +376,7 @@ const HEART_POLYGON = (() => {
 
 function isInsideShape(type, u, v) {
   if (type === 'circle') return u * u + v * v <= 1;
+  if (type === 'diamond') return Math.abs(u) + Math.abs(v) <= 1;
   return true; // rect：バウンディングボックス全体
 }
 
