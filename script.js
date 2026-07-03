@@ -388,46 +388,30 @@ function buildShapeMask(type, minC, minR, maxC, maxR) {
       mask[r][c] = isInsideShape(type, u, v);
     }
   }
-  if (type === 'heart') {
-    patchHeartNotch(mask);
-    patchHeartTip(mask);
-  }
+  if (type === 'heart') patchHeartTip(mask);
   return mask;
-}
-
-// 粗いグリッドでは山と山の間の隙間が2マス幅程度のまま数行続くことがあり、
-// 穴が開いたように見える。隙間が十分狭くなった行は即座に塗りつぶして閉じる。
-function patchHeartNotch(mask) {
-  const h = mask.length;
-  if (!h) return;
-  const w = mask[0].length;
-  for (let r = 0; r < h; r++) {
-    const row = mask[r];
-    let first = -1, last = -1;
-    for (let c = 0; c < w; c++) {
-      if (row[c]) { if (first < 0) first = c; last = c; }
-    }
-    if (first < 0) continue;
-    const gapCells = [];
-    for (let c = first; c <= last; c++) if (!row[c]) gapCells.push(c);
-    if (gapCells.length === 0 || gapCells.length > 2) continue;
-    // 隙間が十分狭い行は即座に塗りつぶして閉じる（行ごとに判定し、途中で止めない）
-    for (const c of gapCells) row[c] = true;
-  }
 }
 
 // ハートの先端は数学的には1点に収束するため、粗いグリッドだと
 // 中心セルの幅より細くなり、先端付近の行が丸ごと空になってしまう。
-// 空になった末尾の行を中央2マスで塗り、鋭く尖らせすぎず丸みを持たせて先端までつなげる。
+// 空になった末尾の行を塗って、先端までつなげる。パッチの幅は小さいグリッドで
+// 目立つ「棒状のしっぽ」にならないよう、直前の実際の行幅に合わせて狭める。
 function patchHeartTip(mask) {
   const h = mask.length;
   if (!h) return;
   const w = mask[0].length;
   const centerCol = Math.floor((w - 1) / 2);
+  // 末尾（先端側）から見て実際に塗られている最初の行を探し、その幅を基準にする
+  let lastRealRow = -1;
   for (let r = h - 1; r >= 0; r--) {
-    if (mask[r].some(v => v)) break;
+    if (mask[r].some(v => v)) { lastRealRow = r; break; }
+  }
+  if (lastRealRow < 0 || lastRealRow === h - 1) return;
+  const lastRowWidth = mask[lastRealRow].reduce((n, v) => n + (v ? 1 : 0), 0);
+  const patchWidth = Math.max(1, Math.min(2, lastRowWidth));
+  for (let r = lastRealRow + 1; r < h; r++) {
     mask[r][centerCol] = true;
-    if (centerCol + 1 < w) mask[r][centerCol + 1] = true;
+    if (patchWidth > 1 && centerCol + 1 < w) mask[r][centerCol + 1] = true;
   }
 }
 
