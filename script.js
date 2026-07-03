@@ -347,13 +347,22 @@ const HEART_POLYGON = (() => {
     const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
     raw.push([x, y]);
   }
+  // 先端（t=π）の近くは接線がほぼ垂直になり、縦長の箱で描くと細い棒が
+  // 飛び出て見える。先端に近すぎる点を間引いて先端まで直線でつなぎ、
+  // 自然な対角線のテーパーにする。
+  const tipIndex = N / 2;
+  const TRIM = 5;
+  const trimmed = raw.filter((_, i) => {
+    const dist = Math.min(Math.abs(i - tipIndex), N - Math.abs(i - tipIndex));
+    return dist === 0 || dist > TRIM;
+  });
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const [x, y] of raw) {
     minX = Math.min(minX, x); maxX = Math.max(maxX, x);
     minY = Math.min(minY, y); maxY = Math.max(maxY, y);
   }
   // y の最小値（曲線の先端）が v=+1（キャンバス下方向）にくるよう反転する
-  return raw.map(([x, y]) => [
+  return trimmed.map(([x, y]) => [
     ((x - minX) / (maxX - minX)) * 2 - 1,
     -(((y - minY) / (maxY - minY)) * 2 - 1),
   ]);
