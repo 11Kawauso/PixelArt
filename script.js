@@ -34,6 +34,12 @@ let rangePath = [];
 let shapeType = 'circle'; // 'circle', 'rect', 'heart'
 let shapeFill = true;
 let shapeStart = null;
+let heartImage = null; // ハート図形に使う差し替え用の画像（用意されていれば数式の代わりに使う）
+(() => {
+  const img = new Image();
+  img.onload = () => { heartImage = img; };
+  img.src = 'images/heart.png';
+})();
 
 // ── DOM ───────────────────────────────────────────────
 const cBg  = document.getElementById('canvas-bg');
@@ -486,6 +492,69 @@ function drawShapePreview(type, fill, c1, r1, c2, r2) {
   ctx.setLineDash([]);
 }
 
+// 画像からシルエット（bool[][]）を作る。左上のピクセルを背景色とみなし、
+// 背景色に近い（または透明な）部分を「外側」とする。色は使わず、選択中の
+// 色で塗るための形だけを取り出す。
+function buildImageSilhouetteMask(img, w, h) {
+  const off = document.createElement('canvas');
+  off.width = w; off.height = h;
+  const ctx = off.getContext('2d');
+  ctx.drawImage(img, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const bgR = data[0], bgG = data[1], bgB = data[2], bgA = data[3];
+  const THRESH = 40;
+  const mask = Array.from({length: h}, () => Array(w).fill(false));
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      const i = (r * w + c) * 4;
+      if (data[i + 3] < 128) continue; // 透明はすべて外側
+      if (bgA >= 128) {
+        const dr = data[i] - bgR, dg = data[i + 1] - bgG, db = data[i + 2] - bgB;
+        if (Math.sqrt(dr * dr + dg * dg + db * db) < THRESH) continue; // 背景色に近い
+      }
+      mask[r][c] = true;
+    }
+  }
+  return mask;
+}
+
+function applyHeartImageToCells(fill, c1, r1, c2, r2) {
+  const {minC, maxC, minR, maxR} = shapeBounds(c1, r1, c2, r2);
+  if (minC > maxC || minR > maxR) return;
+  const w = maxC - minC + 1, h = maxR - minR + 1;
+  let mask = buildImageSilhouetteMask(heartImage, w, h);
+  if (!fill) mask = toOutlineMask(mask);
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (mask[r][c] && isCellEditable(minR + r, minC + c)) {
+        cells[minR + r][minC + c] = currentColor;
+      }
+    }
+  }
+}
+
+function drawHeartImagePreview(fill, c1, r1, c2, r2) {
+  const px = cellPx();
+  const ctx = cOv.getContext('2d');
+  ctx.clearRect(0, 0, cOv.width, cOv.height);
+  const {minC, maxC, minR, maxR} = shapeBounds(c1, r1, c2, r2);
+  if (minC > maxC || minR > maxR) return;
+  const w = maxC - minC + 1, h = maxR - minR + 1;
+  let mask = buildImageSilhouetteMask(heartImage, w, h);
+  if (!fill) mask = toOutlineMask(mask);
+  ctx.fillStyle = 'rgba(59,130,246,0.5)';
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (mask[r][c]) ctx.fillRect((minC + c) * px, (minR + r) * px, px, px);
+    }
+  }
+  ctx.strokeStyle = 'rgba(59,130,246,0.8)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(minC * px + 0.5, minR * px + 0.5, w * px - 1, h * px - 1);
+  ctx.setLineDash([]);
+}
+
 function floodFill(startCol, startRow, newColor) {
   if (!isCellEditable(startRow, startCol)) return;
   const target = cells[startRow][startCol];
@@ -550,7 +619,11 @@ cOv.addEventListener('mousemove', e => {
     return;
   }
   if (currentTool === 'shape' && shapeStart) {
-    drawShapePreview(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
+    if (shapeType === 'heart' && heartImage) {
+      drawHeartImagePreview(shapeFill, shapeStart.col, shapeStart.row, col, row);
+    } else {
+      drawShapePreview(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
+    }
     statPos.textContent = `${col+1}, ${row+1}`;
     return;
   }
@@ -580,7 +653,11 @@ document.addEventListener('mouseup', e => {
   if (currentTool === 'shape' && shapeStart) {
     const {col, row} = getCell(e);
     pushHistory();
-    applyShapeToCells(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
+    if (shapeType === 'heart' && heartImage) {
+      applyHeartImageToCells(shapeFill, shapeStart.col, shapeStart.row, col, row);
+    } else {
+      applyShapeToCells(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
+    }
     shapeStart = null;
     drawCells();
     const ctx = cOv.getContext('2d');
@@ -1070,7 +1147,7 @@ const shapeMenuDropdown = document.getElementById('shape-menu-dropdown');
 
 function updateShapeMenuUI() {
   shapeMenuBtn.classList.toggle('active', currentTool === 'shape');
-  document.querySelectorAll('.shape-opt').forEach(b => {
+  document.querySelectorAll('.shape-opt[data-shape]').forEach(b => {
     const matches = currentTool === 'shape' && b.dataset.shape === shapeType && (b.dataset.fill === '1') === shapeFill;
     b.classList.toggle('active', matches);
   });
@@ -1085,7 +1162,7 @@ shapeMenuBtn.addEventListener('click', e => {
   shapeMenuDropdown.style.display = shapeMenuDropdown.style.display === 'none' ? 'flex' : 'none';
 });
 
-document.querySelectorAll('.shape-opt').forEach(b => {
+document.querySelectorAll('.shape-opt[data-shape]').forEach(b => {
   b.addEventListener('click', () => {
     shapeType = b.dataset.shape;
     shapeFill = b.dataset.fill === '1';
