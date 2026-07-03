@@ -31,7 +31,7 @@ let selectionMask = null;   // null = all editable, or bool[][]
 let rangeStart = null;
 let rangeSelectMode = 'rect'; // 'rect' = 四角で囲う, 'free' = 自分で指定
 let rangePath = [];
-let shapeType = 'circle'; // 'circle', 'rect', 'diamond', 'heart'
+let shapeType = 'circle'; // 'line', 'circle', 'rect', 'diamond', 'heart'
 let shapeFill = true;
 let shapeStart = null;
 let heartImage = null; // ハート図形に使う差し替え用の画像（用意されていれば数式の代わりに使う）
@@ -493,6 +493,25 @@ function drawShapePreview(type, fill, c1, r1, c2, r2) {
   ctx.setLineDash([]);
 }
 
+function applyLineToCells(c1, r1, c2, r2) {
+  for (const {col, row} of interpolateCells(c1, r1, c2, r2)) {
+    if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+    if (!isCellEditable(row, col)) continue;
+    cells[row][col] = currentColor;
+  }
+}
+
+function drawLinePreview(c1, r1, c2, r2) {
+  const px = cellPx();
+  const ctx = cOv.getContext('2d');
+  ctx.clearRect(0, 0, cOv.width, cOv.height);
+  ctx.fillStyle = 'rgba(59,130,246,0.6)';
+  for (const {col, row} of interpolateCells(c1, r1, c2, r2)) {
+    if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
+    ctx.fillRect(col * px, row * px, px, px);
+  }
+}
+
 // 画像からシルエット（bool[][]）を作る。左上のピクセルを背景色とみなし、
 // 背景色に近い（または透明な）部分を「外側」とする。色は使わず、選択中の
 // 色で塗るための形だけを取り出す。
@@ -620,7 +639,9 @@ cOv.addEventListener('mousemove', e => {
     return;
   }
   if (currentTool === 'shape' && shapeStart) {
-    if (shapeType === 'heart' && heartImage) {
+    if (shapeType === 'line') {
+      drawLinePreview(shapeStart.col, shapeStart.row, col, row);
+    } else if (shapeType === 'heart' && heartImage) {
       drawHeartImagePreview(shapeFill, shapeStart.col, shapeStart.row, col, row);
     } else {
       drawShapePreview(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
@@ -654,7 +675,9 @@ document.addEventListener('mouseup', e => {
   if (currentTool === 'shape' && shapeStart) {
     const {col, row} = getCell(e);
     pushHistory();
-    if (shapeType === 'heart' && heartImage) {
+    if (shapeType === 'line') {
+      applyLineToCells(shapeStart.col, shapeStart.row, col, row);
+    } else if (shapeType === 'heart' && heartImage) {
       applyHeartImageToCells(shapeFill, shapeStart.col, shapeStart.row, col, row);
     } else {
       applyShapeToCells(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
