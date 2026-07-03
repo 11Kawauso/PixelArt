@@ -359,23 +359,42 @@ const HEART_POLYGON = (() => {
   ]);
 })();
 
-function isInsideHeart(u, v) {
-  let inside = false;
+function isInsideShape(type, u, v) {
+  if (type === 'circle') return u * u + v * v <= 1;
+  return true; // rect：バウンディングボックス全体
+}
+
+// 水平線 v とハートの輪郭との交点の u 座標を求める（走査線法）。
+// 偶奇の並びで区間ペア [x0,x1], [x2,x3], ... が「内側」を表す。
+function heartRowIntersections(v) {
   const pts = HEART_POLYGON;
+  const xs = [];
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
     const [ui, vi] = pts[i];
     const [uj, vj] = pts[j];
-    if ((vi > v) !== (vj > v) && u < (uj - ui) * (v - vi) / (vj - vi) + ui) {
-      inside = !inside;
+    if ((vi <= v && vj > v) || (vj <= v && vi > v)) {
+      const t = (v - vi) / (vj - vi);
+      xs.push(ui + t * (uj - ui));
     }
   }
-  return inside;
+  xs.sort((a, b) => a - b);
+  return xs;
 }
 
-function isInsideShape(type, u, v) {
-  if (type === 'circle') return u * u + v * v <= 1;
-  if (type === 'heart') return isInsideHeart(u, v);
-  return true; // rect：バウンディングボックス全体
+// u区間 [x0,x1] を列インデックスへ変換して塗る。区間がどの列中心も
+// 含まないほど狭い場合は、区間の中央に最も近い列を1マスだけ塗る。
+// これにより「本来塗られるべき行が丸ごと空になる」ことを避け、
+// 先端が不自然に伸びたり途切れたりしない滑らかなテーパーになる。
+function fillRowInterval(row, w, x0, x1) {
+  const toColF = (x) => ((x + 1) / 2) * w - 0.5;
+  let c0 = Math.max(0, Math.ceil(toColF(x0)));
+  let c1 = Math.min(w - 1, Math.floor(toColF(x1)));
+  if (c0 > c1) {
+    const c = Math.max(0, Math.min(w - 1, Math.round(toColF((x0 + x1) / 2))));
+    row[c] = true;
+  } else {
+    for (let c = c0; c <= c1; c++) row[c] = true;
+  }
 }
 
 function buildShapeMask(type, minC, minR, maxC, maxR) {
@@ -383,36 +402,18 @@ function buildShapeMask(type, minC, minR, maxC, maxR) {
   const mask = Array.from({length: h}, () => Array(w).fill(false));
   for (let r = 0; r < h; r++) {
     const v = ((r + 0.5) / h) * 2 - 1;
-    for (let c = 0; c < w; c++) {
-      const u = ((c + 0.5) / w) * 2 - 1;
-      mask[r][c] = isInsideShape(type, u, v);
+    const row = mask[r];
+    if (type === 'heart') {
+      const xs = heartRowIntersections(v);
+      for (let i = 0; i + 1 < xs.length; i += 2) fillRowInterval(row, w, xs[i], xs[i + 1]);
+    } else {
+      for (let c = 0; c < w; c++) {
+        const u = ((c + 0.5) / w) * 2 - 1;
+        row[c] = isInsideShape(type, u, v);
+      }
     }
   }
-  if (type === 'heart') patchHeartTip(mask);
   return mask;
-}
-
-// ハートの先端は数学的には1点に収束するため、粗いグリッドだと
-// 中心セルの幅より細くなり、先端付近の行が丸ごと空になってしまう。
-// 空になった末尾の行を塗って、先端までつなげる。パッチの幅は小さいグリッドで
-// 目立つ「棒状のしっぽ」にならないよう、直前の実際の行幅に合わせて狭める。
-function patchHeartTip(mask) {
-  const h = mask.length;
-  if (!h) return;
-  const w = mask[0].length;
-  const centerCol = Math.floor((w - 1) / 2);
-  // 末尾（先端側）から見て実際に塗られている最初の行を探し、その幅を基準にする
-  let lastRealRow = -1;
-  for (let r = h - 1; r >= 0; r--) {
-    if (mask[r].some(v => v)) { lastRealRow = r; break; }
-  }
-  if (lastRealRow < 0 || lastRealRow === h - 1) return;
-  const lastRowWidth = mask[lastRealRow].reduce((n, v) => n + (v ? 1 : 0), 0);
-  const patchWidth = Math.max(1, Math.min(2, lastRowWidth));
-  for (let r = lastRealRow + 1; r < h; r++) {
-    mask[r][centerCol] = true;
-    if (patchWidth > 1 && centerCol + 1 < w) mask[r][centerCol + 1] = true;
-  }
 }
 
 function toOutlineMask(mask) {
