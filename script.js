@@ -449,6 +449,30 @@ function toOutlineMask(mask) {
   return outline;
 }
 
+// 枠線を描画サイズ(ブラシサイズ)ぶん太らせる。brushRect と同じ形で
+// 各セルを膨らませることで、ペンツールと同じ太さ感になるようにする。
+function thickenMask(mask, size) {
+  if (size <= 1) return mask;
+  const h = mask.length, w = mask[0].length;
+  const half = Math.floor(size / 2);
+  const result = Array.from({length: h}, () => Array(w).fill(false));
+  for (let r = 0; r < h; r++) {
+    for (let c = 0; c < w; c++) {
+      if (!mask[r][c]) continue;
+      for (let dr = -half; dr <= size - 1 - half; dr++) {
+        const rr = r + dr;
+        if (rr < 0 || rr >= h) continue;
+        for (let dc = -half; dc <= size - 1 - half; dc++) {
+          const cc = c + dc;
+          if (cc < 0 || cc >= w) continue;
+          result[rr][cc] = true;
+        }
+      }
+    }
+  }
+  return result;
+}
+
 function shapeBounds(c1, r1, c2, r2) {
   return {
     minC: Math.max(0, Math.min(c1, c2)),
@@ -462,7 +486,7 @@ function applyShapeToCells(type, fill, c1, r1, c2, r2) {
   const {minC, maxC, minR, maxR} = shapeBounds(c1, r1, c2, r2);
   if (minC > maxC || minR > maxR) return;
   let mask = buildShapeMask(type, minC, minR, maxC, maxR);
-  if (!fill) mask = toOutlineMask(mask);
+  if (!fill) mask = thickenMask(toOutlineMask(mask), brushSize);
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
       if (mask[r - minR][c - minC] && isCellEditable(r, c)) {
@@ -479,7 +503,7 @@ function drawShapePreview(type, fill, c1, r1, c2, r2) {
   const {minC, maxC, minR, maxR} = shapeBounds(c1, r1, c2, r2);
   if (minC > maxC || minR > maxR) return;
   let mask = buildShapeMask(type, minC, minR, maxC, maxR);
-  if (!fill) mask = toOutlineMask(mask);
+  if (!fill) mask = thickenMask(toOutlineMask(mask), brushSize);
   ctx.fillStyle = 'rgba(59,130,246,0.5)';
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
@@ -495,9 +519,7 @@ function drawShapePreview(type, fill, c1, r1, c2, r2) {
 
 function applyLineToCells(c1, r1, c2, r2) {
   for (const {col, row} of interpolateCells(c1, r1, c2, r2)) {
-    if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
-    if (!isCellEditable(row, col)) continue;
-    cells[row][col] = currentColor;
+    paintBrush(col, row, currentColor); // 描画サイズ（ブラシサイズ）を反映する
   }
 }
 
@@ -507,8 +529,12 @@ function drawLinePreview(c1, r1, c2, r2) {
   ctx.clearRect(0, 0, cOv.width, cOv.height);
   ctx.fillStyle = 'rgba(59,130,246,0.6)';
   for (const {col, row} of interpolateCells(c1, r1, c2, r2)) {
-    if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
-    ctx.fillRect(col * px, row * px, px, px);
+    const b = brushRect(col, row);
+    const x1 = Math.max(0, b.c1) * px;
+    const y1 = Math.max(0, b.r1) * px;
+    const x2 = (Math.min(cols - 1, b.c2) + 1) * px;
+    const y2 = (Math.min(rows - 1, b.r2) + 1) * px;
+    if (x2 > x1 && y2 > y1) ctx.fillRect(x1, y1, x2 - x1, y2 - y1);
   }
 }
 
@@ -543,7 +569,7 @@ function applyHeartImageToCells(fill, c1, r1, c2, r2) {
   if (minC > maxC || minR > maxR) return;
   const w = maxC - minC + 1, h = maxR - minR + 1;
   let mask = buildImageSilhouetteMask(heartImage, w, h);
-  if (!fill) mask = toOutlineMask(mask);
+  if (!fill) mask = thickenMask(toOutlineMask(mask), brushSize);
   for (let r = 0; r < h; r++) {
     for (let c = 0; c < w; c++) {
       if (mask[r][c] && isCellEditable(minR + r, minC + c)) {
@@ -561,7 +587,7 @@ function drawHeartImagePreview(fill, c1, r1, c2, r2) {
   if (minC > maxC || minR > maxR) return;
   const w = maxC - minC + 1, h = maxR - minR + 1;
   let mask = buildImageSilhouetteMask(heartImage, w, h);
-  if (!fill) mask = toOutlineMask(mask);
+  if (!fill) mask = thickenMask(toOutlineMask(mask), brushSize);
   ctx.fillStyle = 'rgba(59,130,246,0.5)';
   for (let r = 0; r < h; r++) {
     for (let c = 0; c < w; c++) {
