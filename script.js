@@ -1448,6 +1448,7 @@ document.getElementById('btn-download-transparent').addEventListener('click', ()
 // ── 画像変換 ──────────────────────────────────────────
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
+const convertResizeCanvasCheckbox = document.getElementById('convert-resize-canvas');
 
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.background = '#f0f0ee'; });
@@ -1506,21 +1507,23 @@ function syncSlidersToGrid() {
 
 function convertImage(img) {
   if (!started) startEditor();
-  const maxDim = Math.max(cols, rows);
-  const aspect = img.width / img.height;
-  let newCols, newRows;
-  if (aspect >= 1) {
-    newCols = maxDim;
-    newRows = Math.max(1, Math.round(maxDim / aspect));
-  } else {
-    newRows = maxDim;
-    newCols = Math.max(1, Math.round(maxDim * aspect));
+  if (convertResizeCanvasCheckbox.checked) {
+    const maxDim = Math.max(cols, rows);
+    const aspect = img.width / img.height;
+    let newCols, newRows;
+    if (aspect >= 1) {
+      newCols = maxDim;
+      newRows = Math.max(1, Math.round(maxDim / aspect));
+    } else {
+      newRows = maxDim;
+      newCols = Math.max(1, Math.round(maxDim * aspect));
+    }
+    newCols = Math.min(256, newCols);
+    newRows = Math.min(256, newRows);
+    initCells(newCols, newRows, false);
+    resizeCanvases();
+    syncSlidersToGrid();
   }
-  newCols = Math.min(256, newCols);
-  newRows = Math.min(256, newRows);
-  initCells(newCols, newRows, false);
-  resizeCanvases();
-  syncSlidersToGrid();
   const off = document.createElement('canvas');
   off.width = cols; off.height = rows;
   const ctx = off.getContext('2d');
