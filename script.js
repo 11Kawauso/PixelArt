@@ -1507,6 +1507,10 @@ function syncSlidersToGrid() {
 
 function convertImage(img) {
   if (!started) startEditor();
+  // destC0,destR0,destW,destH: 画像を実際に描画する先の範囲（キャンバス座標）。
+  // キャンバスサイズを変える場合は全面、変えない場合はアスペクト比を保った
+  // まま中央に配置する範囲になる。
+  let destC0 = 0, destR0 = 0, destW = cols, destH = rows;
   if (convertResizeCanvasCheckbox.checked) {
     const maxDim = Math.max(cols, rows);
     const aspect = img.width / img.height;
@@ -1523,17 +1527,25 @@ function convertImage(img) {
     initCells(newCols, newRows, false);
     resizeCanvases();
     syncSlidersToGrid();
+    destW = cols; destH = rows;
+  } else {
+    initCells(cols, rows, false); // キャンバスサイズはそのまま、一旦全セルを透明にクリア
+    const scale = Math.min(cols / img.width, rows / img.height);
+    destW = Math.max(1, Math.round(img.width * scale));
+    destH = Math.max(1, Math.round(img.height * scale));
+    destC0 = Math.floor((cols - destW) / 2);
+    destR0 = Math.floor((rows - destH) / 2);
   }
   const off = document.createElement('canvas');
-  off.width = cols; off.height = rows;
+  off.width = destW; off.height = destH;
   const ctx = off.getContext('2d');
-  ctx.drawImage(img, 0, 0, cols, rows);
-  const data = ctx.getImageData(0, 0, cols, rows).data;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const i = (r * cols + c) * 4;
-      if (data[i+3] < 128) { cells[r][c] = null; continue; }
-      cells[r][c] = `#${[data[i],data[i+1],data[i+2]].map(v=>v.toString(16).padStart(2,'0')).join('')}`;
+  ctx.drawImage(img, 0, 0, destW, destH);
+  const data = ctx.getImageData(0, 0, destW, destH).data;
+  for (let r = 0; r < destH; r++) {
+    for (let c = 0; c < destW; c++) {
+      const i = (r * destW + c) * 4;
+      if (data[i+3] < 128) { cells[destR0 + r][destC0 + c] = null; continue; }
+      cells[destR0 + r][destC0 + c] = `#${[data[i],data[i+1],data[i+2]].map(v=>v.toString(16).padStart(2,'0')).join('')}`;
     }
   }
   if (convertMethod === 'avg') {
@@ -1547,9 +1559,9 @@ function convertImage(img) {
     const hctx = hi.getContext('2d');
     hctx.drawImage(img, 0, 0, sx, sy);
     const hdata = hctx.getImageData(0, 0, sx, sy).data;
-    const cw = sx / cols, ch = sy / rows;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
+    const cw = sx / destW, ch = sy / destH;
+    for (let r = 0; r < destH; r++) {
+      for (let c = 0; c < destW; c++) {
         const x = Math.round(c * cw), y = Math.round(r * ch);
         const w = Math.round(cw), h = Math.round(ch);
         const map = {};
@@ -1565,8 +1577,8 @@ function convertImage(img) {
             if (map[key] > best) { best = map[key]; bestColor = [hdata[i],hdata[i+1],hdata[i+2]]; }
           }
         }
-        if (alphaCount > 0 && alphaSum / alphaCount < 128) { cells[r][c] = null; }
-        else if (bestColor) cells[r][c] = `#${bestColor.map(v=>v.toString(16).padStart(2,'0')).join('')}`;
+        if (alphaCount > 0 && alphaSum / alphaCount < 128) { cells[destR0 + r][destC0 + c] = null; }
+        else if (bestColor) cells[destR0 + r][destC0 + c] = `#${bestColor.map(v=>v.toString(16).padStart(2,'0')).join('')}`;
       }
     }
   }
