@@ -11,7 +11,10 @@ const PALETTE_COLORS = [
 ];
 
 let cols = 32, rows = 32;
-let cells = [];          // cells[row][col] = '#rrggbb' or null
+let layers = [];         // layers[i] = {name, visible, cells}（i=0が最下層）
+let activeLayerIndex = 0;
+let layerNameCounter = 1;
+let cells = [];          // アクティブレイヤーのcellsへの参照。cells[row][col] = '#rrggbb' or null
 let history = [];
 let zoom = 1;
 let currentTool = 'pen';
@@ -62,15 +65,51 @@ function cellPx() {
 }
 
 // ── 初期化 ────────────────────────────────────────────
+function makeCells(c, r) {
+  return Array.from({length: r}, () => Array(c).fill(null));
+}
+
+function makeLayer(name) {
+  return { name, visible: true, cells: makeCells(cols, rows) };
+}
+
+// アクティブレイヤーのcellsをグローバル変数cellsに同期する。
+// 既存の描画ツール群はcellsを直接読み書きするため、この参照の付け替えで
+// 「どのレイヤーに描くか」が切り替わる。
+function syncActiveCells() {
+  activeLayerIndex = Math.max(0, Math.min(layers.length - 1, activeLayerIndex));
+  cells = layers[activeLayerIndex].cells;
+}
+
 function initCells(c, r, keepOld) {
-  const old = cells;
-  cells = Array.from({length: r}, (_, ri) =>
-    Array.from({length: c}, (_, ci) =>
-      keepOld && old[ri] && old[ri][ci] !== undefined ? old[ri][ci] : null
-    )
-  );
   cols = c; rows = r;
+  if (keepOld && layers.length) {
+    layers.forEach(l => {
+      const old = l.cells;
+      l.cells = Array.from({length: r}, (_, ri) =>
+        Array.from({length: c}, (_, ci) =>
+          old[ri] && old[ri][ci] !== undefined ? old[ri][ci] : null
+        )
+      );
+    });
+  } else {
+    layerNameCounter = 1;
+    layers = [makeLayer(`レイヤー${layerNameCounter++}`)];
+    activeLayerIndex = 0;
+  }
+  syncActiveCells();
   document.getElementById('stat-grid').textContent = `${cols}×${rows}`;
+  updateLayerPanel();
+}
+
+// 指定位置の合成後の色（最前面の可視レイヤーの色）を返す
+function compositeAt(r, c) {
+  for (let i = layers.length - 1; i >= 0; i--) {
+    if (!layers[i].visible) continue;
+    const v = layers[i].cells[r] && layers[i].cells[r][c];
+    if (v) return v;
+  }
+  return null;
 }
 
 function canvasSize() {
@@ -127,11 +166,14 @@ function drawCells() {
   const px = cellPx();
   const ctx = cMain.getContext('2d');
   ctx.clearRect(0, 0, cMain.width, cMain.height);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (cells[r][c]) {
-        ctx.fillStyle = cells[r][c];
-        ctx.fillRect(c * px, r * px, px, px);
+  for (const layer of layers) {
+    if (!layer.visible) continue;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (layer.cells[r][c]) {
+          ctx.fillStyle = layer.cells[r][c];
+          ctx.fillRect(c * px, r * px, px, px);
+        }
       }
     }
   }
@@ -334,7 +376,7 @@ function applyToolSingle(col, row) {
   } else if (currentTool === 'erase') {
     paintBrush(col, row, null);
   } else if (currentTool === 'pick') {
-    const c = cells[row][col];
+    const c = compositeAt(row, col);
     if (c) { setColor(c); }
   } else if (currentTool === 'fill') {
     floodFill(col, row, currentColor);
@@ -703,7 +745,7 @@ cOv.addEventListener('mousemove', e => {
   }
   drawOverlayCell(col, row);
   statPos.textContent = `${col+1}, ${row+1}`;
-  const c = cells[row] && cells[row][col];
+  const c = compositeAt(row, col);
   statColor.textContent = c || '—';
   if (!isPainting) return;
   if (lastCell && lastCell.col === col && lastCell.row === row) return;
@@ -736,11 +778,13 @@ document.addEventListener('mouseup', e => {
     }
     shapeStart = null;
     drawCells();
+    updateLayerThumbnails();
     const ctx = cOv.getContext('2d');
     ctx.clearRect(0, 0, cOv.width, cOv.height);
     drawSelectionOverlay(ctx);
     return;
   }
+  if (isPainting) updateLayerThumbnails();
   isPainting = false; lastCell = null;
 });
 cOv.addEventListener('mouseleave',() => {
@@ -821,25 +865,154 @@ cOv.addEventListener('touchmove', e => {
 
 cOv.addEventListener('touchend', e => {
   if (e.touches.length < 2) isPinching = false;
-  if (e.touches.length === 0) { isPainting = false; lastCell = null; }
+  if (e.touches.length === 0) {
+    if (isPainting) updateLayerThumbnails();
+    isPainting = false; lastCell = null;
+  }
 });
 
 // ── ヒストリー ────────────────────────────────────────
 function pushHistory() {
-  history.push(cells.map(r => [...r]));
+  history.push({
+    active: activeLayerIndex,
+    layers: layers.map(l => ({ name: l.name, visible: l.visible, cells: l.cells.map(r => [...r]) })),
+  });
   if (history.length > 50) history.shift();
   document.getElementById('btn-undo').disabled = false;
 }
 function undo() {
   if (!history.length) return;
-  cells = history.pop();
+  const snap = history.pop();
+  layers = snap.layers;
+  activeLayerIndex = snap.active;
+  syncActiveCells();
   drawCells();
+  updateLayerPanel();
   if (!history.length) document.getElementById('btn-undo').disabled = true;
 }
 document.addEventListener('keydown', e => {
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
 });
 document.getElementById('btn-undo').addEventListener('click', undo);
+
+// ── レイヤーパネル ────────────────────────────────────
+const layerListEl = document.getElementById('layer-list');
+const btnLayerAdd = document.getElementById('btn-layer-add');
+const btnLayerUp = document.getElementById('btn-layer-up');
+const btnLayerDown = document.getElementById('btn-layer-down');
+const btnLayerDelete = document.getElementById('btn-layer-delete');
+let layerThumbCanvases = []; // layers と同じ並び（i=0が最下層）
+
+function drawLayerThumb(canvas, layer) {
+  canvas.width = cols;
+  canvas.height = rows;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, cols, rows);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (layer.cells[r][c]) {
+        ctx.fillStyle = layer.cells[r][c];
+        ctx.fillRect(c, r, 1, 1);
+      }
+    }
+  }
+}
+
+function updateLayerThumbnails() {
+  layers.forEach((layer, i) => {
+    if (layerThumbCanvases[i]) drawLayerThumb(layerThumbCanvases[i], layer);
+  });
+}
+
+function updateLayerPanel() {
+  if (!layerListEl) return;
+  layerListEl.innerHTML = '';
+  layerThumbCanvases = new Array(layers.length);
+  // 上のレイヤーほどリストの上に表示する
+  for (let i = layers.length - 1; i >= 0; i--) {
+    const layer = layers[i];
+    const item = document.createElement('div');
+    item.className = 'layer-item'
+      + (i === activeLayerIndex ? ' active' : '')
+      + (layer.visible ? '' : ' hidden-layer');
+
+    const eye = document.createElement('button');
+    eye.className = 'layer-eye' + (layer.visible ? '' : ' hidden-layer');
+    eye.textContent = layer.visible ? '👁' : '─';
+    eye.title = layer.visible ? '非表示にする' : '表示する';
+    eye.addEventListener('click', e => {
+      e.stopPropagation();
+      pushHistory();
+      layer.visible = !layer.visible;
+      drawCells();
+      updateLayerPanel();
+    });
+
+    const thumb = document.createElement('canvas');
+    thumb.className = 'layer-thumb';
+    drawLayerThumb(thumb, layer);
+    layerThumbCanvases[i] = thumb;
+
+    const name = document.createElement('span');
+    name.className = 'layer-name';
+    name.textContent = layer.name;
+
+    item.appendChild(eye);
+    item.appendChild(thumb);
+    item.appendChild(name);
+    item.addEventListener('click', () => {
+      if (i === activeLayerIndex) return;
+      activeLayerIndex = i;
+      syncActiveCells();
+      updateLayerPanel();
+    });
+    layerListEl.appendChild(item);
+  }
+  btnLayerDelete.disabled = layers.length <= 1;
+  btnLayerUp.disabled = activeLayerIndex >= layers.length - 1;
+  btnLayerDown.disabled = activeLayerIndex <= 0;
+}
+
+// アクティブレイヤーの直上に空レイヤーを追加してアクティブにする
+// （履歴は呼び出し側で積むこと）
+function addLayerAboveActive() {
+  const layer = makeLayer(`レイヤー${layerNameCounter++}`);
+  layers.splice(activeLayerIndex + 1, 0, layer);
+  activeLayerIndex += 1;
+  syncActiveCells();
+  updateLayerPanel();
+}
+
+btnLayerAdd.addEventListener('click', () => {
+  if (!started) return;
+  pushHistory();
+  addLayerAboveActive();
+});
+
+btnLayerDelete.addEventListener('click', () => {
+  if (!started || layers.length <= 1) return;
+  pushHistory();
+  layers.splice(activeLayerIndex, 1);
+  activeLayerIndex = Math.min(activeLayerIndex, layers.length - 1);
+  syncActiveCells();
+  drawCells();
+  updateLayerPanel();
+});
+
+function moveActiveLayer(dir) {
+  const to = activeLayerIndex + dir;
+  if (to < 0 || to >= layers.length) return;
+  pushHistory();
+  const [layer] = layers.splice(activeLayerIndex, 1);
+  layers.splice(to, 0, layer);
+  activeLayerIndex = to;
+  syncActiveCells();
+  drawCells();
+  updateLayerPanel();
+}
+
+btnLayerUp.addEventListener('click', () => { if (started) moveActiveLayer(1); });
+btnLayerDown.addEventListener('click', () => { if (started) moveActiveLayer(-1); });
 
 // ── 色履歴の位置更新 ──────────────────────────────────
 const colorHistoryEl = document.getElementById('color-history');
@@ -1398,8 +1571,11 @@ canvasArea.addEventListener('contextmenu', e => e.preventDefault());
 document.getElementById('btn-clear').addEventListener('click', () => {
   if (!started) return;
   pushHistory();
-  cells = cells.map(r => r.map(() => null));
+  const layer = layers[activeLayerIndex];
+  layer.cells = makeCells(cols, rows);
+  syncActiveCells();
   drawCells();
+  updateLayerPanel();
 });
 
 // ── ダウンロード ──────────────────────────────────────
@@ -1413,8 +1589,9 @@ document.getElementById('btn-download').addEventListener('click', () => {
   ctx.fillRect(0, 0, out.width, out.height);
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      if (cells[r][c]) {
-        ctx.fillStyle = cells[r][c];
+      const color = compositeAt(r, c);
+      if (color) {
+        ctx.fillStyle = color;
         ctx.fillRect(c * px, r * px, px, px);
       }
     }
@@ -1433,8 +1610,9 @@ document.getElementById('btn-download-transparent').addEventListener('click', ()
   const ctx = out.getContext('2d');
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      if (cells[r][c]) {
-        ctx.fillStyle = cells[r][c];
+      const color = compositeAt(r, c);
+      if (color) {
+        ctx.fillStyle = color;
         ctx.fillRect(c * px, r * px, px, px);
       }
     }
@@ -1524,18 +1702,19 @@ function convertImage(img) {
     }
     newCols = Math.min(256, newCols);
     newRows = Math.min(256, newRows);
-    initCells(newCols, newRows, false);
+    initCells(newCols, newRows, true); // 既存レイヤーは残したままサイズだけ変更
     resizeCanvases();
     syncSlidersToGrid();
     destW = cols; destH = rows;
   } else {
-    initCells(cols, rows, false); // キャンバスサイズはそのまま、一旦全セルを透明にクリア
     const scale = Math.min(cols / img.width, rows / img.height);
     destW = Math.max(1, Math.round(img.width * scale));
     destH = Math.max(1, Math.round(img.height * scale));
     destC0 = Math.floor((cols - destW) / 2);
     destR0 = Math.floor((rows - destH) / 2);
   }
+  // 変換結果は既存の絵を消さず、新しいレイヤーとして重ねる
+  addLayerAboveActive();
   const off = document.createElement('canvas');
   off.width = destW; off.height = destH;
   const ctx = off.getContext('2d');
@@ -1584,6 +1763,7 @@ function convertImage(img) {
   }
   quantizeColors(convertColorCount);
   drawCells();
+  updateLayerThumbnails();
 }
 
 function quantizeColors(maxColors) {
