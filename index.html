@@ -210,6 +210,11 @@
     <!-- レイヤー -->
     <div class="panel-section">
       <div class="panel-label">レイヤー</div>
+      <div class="layer-opacity-row">
+        <label for="layer-opacity">不透明度</label>
+        <input type="range" id="layer-opacity" min="0" max="100" value="100" step="1">
+        <span class="layer-opacity-val" id="layer-opacity-val">100</span>
+      </div>
       <div class="layer-list" id="layer-list"></div>
       <div class="layer-actions">
         <button id="btn-layer-add" title="レイヤーを追加">＋ 追加</button>
@@ -217,6 +222,12 @@
         <button id="btn-layer-down" title="レイヤーを下へ移動">↓</button>
         <button id="btn-layer-delete" class="danger" title="レイヤーを削除">🗑</button>
       </div>
+      <div class="layer-actions" style="margin-top:5px;">
+        <button id="btn-layer-dup" title="レイヤーを複製">⧉ 複製</button>
+        <button id="btn-layer-merge" title="下のレイヤーと結合">⬇ 下と結合</button>
+        <button id="btn-layer-lock" title="レイヤーをロック">🔒</button>
+      </div>
+      <div class="layer-hint">名前はダブルクリックで変更できます</div>
     </div>
 
     </div>

@@ -70,7 +70,11 @@ function makeCells(c, r) {
 }
 
 function makeLayer(name) {
-  return { name, visible: true, cells: makeCells(cols, rows) };
+  return { name, visible: true, opacity: 1, locked: false, cells: makeCells(cols, rows) };
+}
+
+function activeLayerLocked() {
+  return layers[activeLayerIndex] && layers[activeLayerIndex].locked;
 }
 
 // アクティブレイヤーのcellsをグローバル変数cellsに同期する。
@@ -102,14 +106,26 @@ function initCells(c, r, keepOld) {
   updateLayerPanel();
 }
 
-// 指定位置の合成後の色（最前面の可視レイヤーの色）を返す
+// 下の色の上に上の色を不透明度alphaで重ねた色を返す。
+// セルはアルファ値を持てないため、下が透明の場合は上の色をそのまま使う。
+function blendHex(bottomHex, topHex, alpha) {
+  if (alpha >= 1 || !bottomHex) return topHex;
+  const b = [1, 3, 5].map(i => parseInt(bottomHex.slice(i, i + 2), 16));
+  const t = [1, 3, 5].map(i => parseInt(topHex.slice(i, i + 2), 16));
+  return '#' + t.map((v, i) =>
+    Math.round(v * alpha + b[i] * (1 - alpha)).toString(16).padStart(2, '0')
+  ).join('');
+}
+
+// 指定位置の合成後の色（可視レイヤーを不透明度込みで下から重ねた色）を返す
 function compositeAt(r, c) {
-  for (let i = layers.length - 1; i >= 0; i--) {
-    if (!layers[i].visible) continue;
-    const v = layers[i].cells[r] && layers[i].cells[r][c];
-    if (v) return v;
+  let out = null;
+  for (const layer of layers) {
+    if (!layer.visible || layer.opacity <= 0) continue;
+    const v = layer.cells[r] && layer.cells[r][c];
+    if (v) out = blendHex(out, v, layer.opacity);
   }
-  return null;
+  return out;
 }
 
 function canvasSize() {
@@ -167,7 +183,8 @@ function drawCells() {
   const ctx = cMain.getContext('2d');
   ctx.clearRect(0, 0, cMain.width, cMain.height);
   for (const layer of layers) {
-    if (!layer.visible) continue;
+    if (!layer.visible || layer.opacity <= 0) continue;
+    ctx.globalAlpha = layer.opacity;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (layer.cells[r][c]) {
@@ -177,6 +194,7 @@ function drawCells() {
       }
     }
   }
+  ctx.globalAlpha = 1;
   drawGridLines();
 }
 
@@ -258,6 +276,7 @@ function getCell(e) {
 }
 
 function isCellEditable(r, c) {
+  if (activeLayerLocked()) return false;
   return !selectionMask || (selectionMask[r] && selectionMask[r][c]);
 }
 
@@ -705,9 +724,11 @@ cOv.addEventListener('mousedown', e => {
     return;
   }
   if (currentTool === 'shape') {
+    if (activeLayerLocked()) return;
     shapeStart = {col, row};
     return;
   }
+  if (activeLayerLocked() && currentTool !== 'pick') return;
   pushHistory();
   isPainting = true;
   lastCell = {col, row};
@@ -827,6 +848,7 @@ cOv.addEventListener('touchstart', e => {
   }
   if (!started) return;
   isPinching = false;
+  if (activeLayerLocked() && currentTool !== 'pick') return;
   pushHistory();
   isPainting = true;
   const t = e.touches[0];
@@ -875,7 +897,7 @@ cOv.addEventListener('touchend', e => {
 function pushHistory() {
   history.push({
     active: activeLayerIndex,
-    layers: layers.map(l => ({ name: l.name, visible: l.visible, cells: l.cells.map(r => [...r]) })),
+    layers: layers.map(l => ({ name: l.name, visible: l.visible, opacity: l.opacity, locked: l.locked, cells: l.cells.map(r => [...r]) })),
   });
   if (history.length > 50) history.shift();
   document.getElementById('btn-undo').disabled = false;
@@ -919,6 +941,11 @@ const btnLayerAdd = document.getElementById('btn-layer-add');
 const btnLayerUp = document.getElementById('btn-layer-up');
 const btnLayerDown = document.getElementById('btn-layer-down');
 const btnLayerDelete = document.getElementById('btn-layer-delete');
+const btnLayerDup = document.getElementById('btn-layer-dup');
+const btnLayerMerge = document.getElementById('btn-layer-merge');
+const btnLayerLock = document.getElementById('btn-layer-lock');
+const layerOpacitySlider = document.getElementById('layer-opacity');
+const layerOpacityVal = document.getElementById('layer-opacity-val');
 let layerThumbCanvases = []; // layers と同じ並び（i=0が最下層）
 
 function drawLayerThumb(canvas, layer) {
@@ -974,10 +1001,22 @@ function updateLayerPanel() {
     const name = document.createElement('span');
     name.className = 'layer-name';
     name.textContent = layer.name;
+    name.title = 'ダブルクリックで名前を変更';
+    name.addEventListener('dblclick', e => {
+      e.stopPropagation();
+      startRenameLayer(layer, name);
+    });
 
     item.appendChild(eye);
     item.appendChild(thumb);
     item.appendChild(name);
+    if (layer.locked) {
+      const lock = document.createElement('span');
+      lock.className = 'layer-lock-icon';
+      lock.textContent = '🔒';
+      lock.title = 'ロック中';
+      item.appendChild(lock);
+    }
     item.addEventListener('click', () => {
       if (i === activeLayerIndex) return;
       activeLayerIndex = i;
@@ -989,6 +1028,45 @@ function updateLayerPanel() {
   btnLayerDelete.disabled = layers.length <= 1;
   btnLayerUp.disabled = activeLayerIndex >= layers.length - 1;
   btnLayerDown.disabled = activeLayerIndex <= 0;
+  btnLayerMerge.disabled = activeLayerIndex <= 0;
+  const active = layers[activeLayerIndex];
+  if (active) {
+    layerOpacitySlider.value = Math.round(active.opacity * 100);
+    layerOpacityVal.textContent = Math.round(active.opacity * 100);
+    btnLayerLock.classList.toggle('active', !!active.locked);
+    btnLayerLock.textContent = active.locked ? '🔒' : '🔓';
+    btnLayerLock.title = active.locked ? 'ロックを解除' : 'レイヤーをロック';
+  }
+}
+
+// レイヤー名のインライン編集。Enterまたはフォーカスアウトで確定する。
+function startRenameLayer(layer, nameEl) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'layer-name-input';
+  input.value = layer.name;
+  input.maxLength = 20;
+  nameEl.replaceWith(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    const newName = input.value.trim();
+    if (newName && newName !== layer.name) {
+      pushHistory();
+      layer.name = newName;
+    }
+    updateLayerPanel();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') { done = true; updateLayerPanel(); }
+    e.stopPropagation();
+  });
+  input.addEventListener('click', e => e.stopPropagation());
 }
 
 // アクティブレイヤーの直上に空レイヤーを追加してアクティブにする
@@ -1031,6 +1109,67 @@ function moveActiveLayer(dir) {
 
 btnLayerUp.addEventListener('click', () => { if (started) moveActiveLayer(1); });
 btnLayerDown.addEventListener('click', () => { if (started) moveActiveLayer(-1); });
+
+// 不透明度スライダー。ドラッグ中はリアルタイムに反映し、
+// 履歴はドラッグ開始時の状態を1回だけ積む。
+let opacityGestureActive = false;
+layerOpacitySlider.addEventListener('input', () => {
+  if (!started) return;
+  if (!opacityGestureActive) { pushHistory(); opacityGestureActive = true; }
+  const v = parseInt(layerOpacitySlider.value) / 100;
+  layers[activeLayerIndex].opacity = v;
+  layerOpacityVal.textContent = layerOpacitySlider.value;
+  drawCells();
+});
+layerOpacitySlider.addEventListener('change', () => {
+  opacityGestureActive = false;
+});
+
+btnLayerDup.addEventListener('click', () => {
+  if (!started) return;
+  pushHistory();
+  const src = layers[activeLayerIndex];
+  const copy = {
+    name: `${src.name} のコピー`.slice(0, 20),
+    visible: src.visible,
+    opacity: src.opacity,
+    locked: false,
+    cells: src.cells.map(r => [...r]),
+  };
+  layers.splice(activeLayerIndex + 1, 0, copy);
+  activeLayerIndex += 1;
+  syncActiveCells();
+  drawCells();
+  updateLayerPanel();
+});
+
+btnLayerMerge.addEventListener('click', () => {
+  if (!started || activeLayerIndex <= 0) return;
+  pushHistory();
+  const top = layers[activeLayerIndex];
+  const below = layers[activeLayerIndex - 1];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const v = top.cells[r][c];
+      if (v && top.visible) {
+        below.cells[r][c] = blendHex(below.cells[r][c], v, top.opacity);
+      }
+    }
+  }
+  layers.splice(activeLayerIndex, 1);
+  activeLayerIndex -= 1;
+  syncActiveCells();
+  drawCells();
+  updateLayerPanel();
+});
+
+btnLayerLock.addEventListener('click', () => {
+  if (!started) return;
+  pushHistory();
+  const layer = layers[activeLayerIndex];
+  layer.locked = !layer.locked;
+  updateLayerPanel();
+});
 
 // ── 色履歴の位置更新 ──────────────────────────────────
 const colorHistoryEl = document.getElementById('color-history');
@@ -1587,7 +1726,7 @@ canvasArea.addEventListener('contextmenu', e => e.preventDefault());
 
 // ── クリア ────────────────────────────────────────────
 document.getElementById('btn-clear').addEventListener('click', () => {
-  if (!started) return;
+  if (!started || activeLayerLocked()) return;
   pushHistory();
   const layer = layers[activeLayerIndex];
   layer.cells = makeCells(cols, rows);
