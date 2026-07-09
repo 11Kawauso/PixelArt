@@ -894,13 +894,19 @@ cOv.addEventListener('touchend', e => {
 });
 
 // ── ヒストリー ────────────────────────────────────────
-function pushHistory() {
-  history.push({
+function layersSnapshot() {
+  return {
     active: activeLayerIndex,
     layers: layers.map(l => ({ name: l.name, visible: l.visible, opacity: l.opacity, locked: l.locked, cells: l.cells.map(r => [...r]) })),
-  });
+  };
+}
+function pushSnapshot(snap) {
+  history.push(snap);
   if (history.length > 50) history.shift();
   document.getElementById('btn-undo').disabled = false;
+}
+function pushHistory() {
+  pushSnapshot(layersSnapshot());
 }
 function undo() {
   if (!history.length) return;
@@ -1017,6 +1023,15 @@ function updateLayerPanel() {
       lock.title = 'ロック中';
       item.appendChild(lock);
     }
+
+    const handle = document.createElement('span');
+    handle.className = 'layer-drag-handle';
+    handle.textContent = '⠿';
+    handle.title = 'ドラッグで並び替え';
+    handle.addEventListener('click', e => e.stopPropagation());
+    handle.addEventListener('pointerdown', e => startLayerDrag(e, i, item));
+    item.appendChild(handle);
+
     item.addEventListener('click', () => {
       if (i === activeLayerIndex) return;
       activeLayerIndex = i;
@@ -1037,6 +1052,56 @@ function updateLayerPanel() {
     btnLayerLock.textContent = active.locked ? '🔒' : '🔓';
     btnLayerLock.title = active.locked ? 'ロックを解除' : 'レイヤーをロック';
   }
+}
+
+// レイヤー項目のドラッグ並び替え（上下移動のみ）。
+// ドラッグ中はリスト内のDOMを直接並び替えてプレビューし、
+// 離した時点で順序が変わっていればlayers配列に反映して履歴を積む。
+function startLayerDrag(e, layerIdx, item) {
+  e.preventDefault();
+  e.stopPropagation();
+  const handle = e.currentTarget;
+  const snap = layersSnapshot(); // ドラッグ前の状態（Undo用）
+  const displayItems = () => [...layerListEl.children];
+  const startDisplay = displayItems().indexOf(item);
+  let curDisplay = startDisplay;
+  item.classList.add('dragging');
+  handle.setPointerCapture(e.pointerId);
+
+  const onMove = ev => {
+    const list = displayItems();
+    let target = list.length - 1;
+    for (let d = 0; d < list.length; d++) {
+      const r = list[d].getBoundingClientRect();
+      if (ev.clientY < r.top + r.height / 2) { target = d; break; }
+    }
+    if (target !== curDisplay) {
+      const ref = list[target];
+      if (target < curDisplay) layerListEl.insertBefore(item, ref);
+      else layerListEl.insertBefore(item, ref.nextSibling);
+      curDisplay = target;
+    }
+  };
+  const onUp = () => {
+    handle.removeEventListener('pointermove', onMove);
+    handle.removeEventListener('pointerup', onUp);
+    handle.removeEventListener('pointercancel', onUp);
+    item.classList.remove('dragging');
+    if (curDisplay !== startDisplay) {
+      pushSnapshot(snap);
+      // 表示位置（上が先頭）→ layers配列のインデックス（0が最下層）に変換
+      const to = layers.length - 1 - curDisplay;
+      const [layer] = layers.splice(layerIdx, 1);
+      layers.splice(to, 0, layer);
+      activeLayerIndex = to;
+      syncActiveCells();
+      drawCells();
+    }
+    updateLayerPanel();
+  };
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onUp);
+  handle.addEventListener('pointercancel', onUp);
 }
 
 // レイヤー名のインライン編集。Enterまたはフォーカスアウトで確定する。

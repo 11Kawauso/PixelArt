@@ -903,3 +903,26 @@ input, select, textarea {
   overflow-y: auto;
   margin-bottom: 10px;
 }
+
+/* ── レイヤーのドラッグ並び替え ── */
+.layer-drag-handle {
+  margin-left: 2px;
+  padding: 4px 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: grab;
+  touch-action: none;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.layer-drag-handle:hover {
+  background: var(--border);
+  color: var(--text);
+}
+.layer-item.dragging {
+  opacity: 0.85;
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  cursor: grabbing;
+}
+.layer-item.dragging .layer-drag-handle { cursor: grabbing; }
