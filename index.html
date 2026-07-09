@@ -31,6 +31,15 @@
   <!-- 左パネル -->
   <div class="panel" id="panel">
 
+    <!-- パネルタブ -->
+    <div class="panel-tabs">
+      <button class="panel-tab-btn active" id="tab-draw">✏️ 描画</button>
+      <button class="panel-tab-btn" id="tab-layers">🗂 レイヤー</button>
+    </div>
+
+    <!-- 描画タブ -->
+    <div class="panel-tab-page" id="panel-tab-draw">
+
     <!-- ツール -->
     <div class="panel-section">
       <div class="panel-label">ツール</div>
@@ -39,18 +48,6 @@
         <button class="tool-btn" data-tool="fill">🪣 塗り潰し</button>
         <button class="tool-btn" data-tool="erase">🧹 消しゴム</button>
         <button class="tool-btn" data-tool="pick">💉 スポイト</button>
-      </div>
-    </div>
-
-    <!-- レイヤー -->
-    <div class="panel-section">
-      <div class="panel-label">レイヤー</div>
-      <div class="layer-list" id="layer-list"></div>
-      <div class="layer-actions">
-        <button id="btn-layer-add" title="レイヤーを追加">＋ 追加</button>
-        <button id="btn-layer-up" title="レイヤーを上へ移動">↑</button>
-        <button id="btn-layer-down" title="レイヤーを下へ移動">↓</button>
-        <button id="btn-layer-delete" class="danger" title="レイヤーを削除">🗑</button>
       </div>
     </div>
 
@@ -203,6 +200,25 @@
         <input type="checkbox" id="show-grid" checked style="accent-color:var(--accent)">
         グリッド線を表示
       </label>
+    </div>
+
+    </div>
+
+    <!-- レイヤータブ -->
+    <div class="panel-tab-page" id="panel-tab-layers" style="display:none;">
+
+    <!-- レイヤー -->
+    <div class="panel-section">
+      <div class="panel-label">レイヤー</div>
+      <div class="layer-list" id="layer-list"></div>
+      <div class="layer-actions">
+        <button id="btn-layer-add" title="レイヤーを追加">＋ 追加</button>
+        <button id="btn-layer-up" title="レイヤーを上へ移動">↑</button>
+        <button id="btn-layer-down" title="レイヤーを下へ移動">↓</button>
+        <button id="btn-layer-delete" class="danger" title="レイヤーを削除">🗑</button>
+      </div>
+    </div>
+
     </div>
 
   </div>

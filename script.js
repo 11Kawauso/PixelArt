@@ -895,6 +895,24 @@ document.addEventListener('keydown', e => {
 });
 document.getElementById('btn-undo').addEventListener('click', undo);
 
+// ── パネルタブ（描画／レイヤー） ──────────────────────
+const tabDrawBtn = document.getElementById('tab-draw');
+const tabLayersBtn = document.getElementById('tab-layers');
+const tabDrawPage = document.getElementById('panel-tab-draw');
+const tabLayersPage = document.getElementById('panel-tab-layers');
+
+function switchPanelTab(tab) {
+  const showLayers = tab === 'layers';
+  tabDrawBtn.classList.toggle('active', !showLayers);
+  tabLayersBtn.classList.toggle('active', showLayers);
+  tabDrawPage.style.display = showLayers ? 'none' : '';
+  tabLayersPage.style.display = showLayers ? '' : 'none';
+  if (showLayers) updateLayerThumbnails();
+}
+
+tabDrawBtn.addEventListener('click', () => switchPanelTab('draw'));
+tabLayersBtn.addEventListener('click', () => switchPanelTab('layers'));
+
 // ── レイヤーパネル ────────────────────────────────────
 const layerListEl = document.getElementById('layer-list');
 const btnLayerAdd = document.getElementById('btn-layer-add');

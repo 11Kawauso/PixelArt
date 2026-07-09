@@ -805,3 +805,34 @@ input, select, textarea {
 }
 .layer-actions button { flex: 1; padding: 5px 0; }
 #btn-layer-add { flex: 2; }
+
+/* ── パネルタブ ── */
+.panel-tabs {
+  display: flex;
+  gap: 5px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex-shrink: 0;
+}
+.panel-tab-btn {
+  flex: 1;
+  height: 32px;
+  border-radius: var(--radius);
+  font-size: 12px;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.panel-tab-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* レイヤータブではリストを広く使えるようにする */
+#panel-tab-layers .layer-list {
+  max-height: none;
+}
