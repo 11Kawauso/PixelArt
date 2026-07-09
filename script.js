@@ -1069,18 +1069,30 @@ function startLayerDrag(e, layerIdx, item) {
   handle.setPointerCapture(e.pointerId);
 
   const onMove = ev => {
-    const list = displayItems();
-    let target = list.length - 1;
-    for (let d = 0; d < list.length; d++) {
-      const r = list[d].getBoundingClientRect();
-      if (ev.clientY < r.top + r.height / 2) { target = d; break; }
+    // 隣の項目の中点をポインタが越えたら1つ入れ替える。
+    // 速いドラッグで一度に複数越えた場合に備えて安定するまで繰り返す。
+    for (let guard = 0; guard < layers.length; guard++) {
+      const list = displayItems();
+      const idx = list.indexOf(item);
+      const next = list[idx + 1];
+      if (next) {
+        const r = next.getBoundingClientRect();
+        if (ev.clientY > r.top + r.height / 2) {
+          layerListEl.insertBefore(next, item);
+          continue;
+        }
+      }
+      const prev = list[idx - 1];
+      if (prev) {
+        const r = prev.getBoundingClientRect();
+        if (ev.clientY < r.top + r.height / 2) {
+          layerListEl.insertBefore(item, prev);
+          continue;
+        }
+      }
+      break;
     }
-    if (target !== curDisplay) {
-      const ref = list[target];
-      if (target < curDisplay) layerListEl.insertBefore(item, ref);
-      else layerListEl.insertBefore(item, ref.nextSibling);
-      curDisplay = target;
-    }
+    curDisplay = displayItems().indexOf(item);
   };
   const onUp = () => {
     handle.removeEventListener('pointermove', onMove);
