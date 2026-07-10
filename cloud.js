@@ -23,7 +23,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// 現在開いているクラウド作品（上書き保存用）
+// 現在開いているクラウド作品（上書き保存の対象）
 let currentArtworkId = null;
 let currentArtworkName = '';
 
@@ -32,9 +32,11 @@ const btnLogin = document.getElementById('btn-login');
 const btnLogout = document.getElementById('btn-logout');
 const userChip = document.getElementById('user-chip');
 const userAvatar = document.getElementById('user-avatar');
-const btnCloudSave = document.getElementById('btn-cloud-save');
+const btnSaveNew = document.getElementById('btn-cloud-save-new');
+const btnSaveOver = document.getElementById('btn-cloud-save-over');
 const btnGallery = document.getElementById('btn-gallery');
 const galleryModal = document.getElementById('gallery-modal');
+const galleryTitle = document.getElementById('gallery-title');
 const galleryList = document.getElementById('gallery-list');
 const btnGalleryClose = document.getElementById('btn-gallery-close');
 const saveNameModal = document.getElementById('save-name-modal');
@@ -42,6 +44,8 @@ const saveNameInput = document.getElementById('save-name-input');
 const btnSaveOk = document.getElementById('btn-save-ok');
 const btnSaveCancel = document.getElementById('btn-save-cancel');
 const toastEl = document.getElementById('cloud-toast');
+const artworkChip = document.getElementById('artwork-chip');
+const artworkChipName = document.getElementById('artwork-chip-name');
 
 let toastTimer = null;
 function showToast(msg, isError) {
@@ -52,19 +56,31 @@ function showToast(msg, isError) {
   toastTimer = setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
 }
 
+// 開いている作品を切り替え、ヘッダーの作品名チップに反映する
+function setCurrentArtwork(id, name) {
+  currentArtworkId = id;
+  currentArtworkName = name || '';
+  if (id) {
+    artworkChipName.textContent = currentArtworkName;
+    artworkChip.style.display = 'inline-flex';
+  } else {
+    artworkChip.style.display = 'none';
+  }
+}
+
 // ── 認証 ──
 onAuthStateChanged(auth, user => {
   const loggedIn = !!user;
   btnLogin.style.display = loggedIn ? 'none' : '';
   userChip.style.display = loggedIn ? 'flex' : 'none';
-  btnCloudSave.style.display = loggedIn ? '' : 'none';
+  btnSaveNew.style.display = loggedIn ? '' : 'none';
+  btnSaveOver.style.display = loggedIn ? '' : 'none';
   btnGallery.style.display = loggedIn ? '' : 'none';
   if (loggedIn) {
     userAvatar.src = user.photoURL || '';
     userAvatar.title = user.displayName || user.email || '';
   } else {
-    currentArtworkId = null;
-    currentArtworkName = '';
+    setCurrentArtwork(null, '');
   }
 });
 
@@ -106,26 +122,20 @@ async function saveArtwork(name, artworkId) {
   return ref.id;
 }
 
-btnCloudSave.addEventListener('click', () => {
+// 新規保存: 常に名前を付けて新しい作品として保存し、以後の上書き対象にする
+btnSaveNew.addEventListener('click', () => {
   if (!auth.currentUser || !window.isEditorStarted()) return;
-  if (currentArtworkId) {
-    // 開いている作品に上書き保存
-    saveArtwork(currentArtworkName, currentArtworkId)
-      .then(() => showToast(`「${currentArtworkName}」に上書き保存しました`))
-      .catch(err => showToast('保存に失敗しました: ' + (err.code || err.message), true));
-  } else {
-    saveNameInput.value = '';
-    saveNameModal.style.display = 'flex';
-    saveNameInput.focus();
-  }
+  saveNameInput.value = '';
+  saveNameModal.style.display = 'flex';
+  saveNameInput.focus();
 });
 
 btnSaveOk.addEventListener('click', async () => {
   const name = saveNameInput.value.trim() || '無題';
   saveNameModal.style.display = 'none';
   try {
-    currentArtworkId = await saveArtwork(name, null);
-    currentArtworkName = name;
+    const id = await saveArtwork(name, null);
+    setCurrentArtwork(id, name);
     showToast(`「${name}」を保存しました`);
   } catch (err) {
     showToast('保存に失敗しました: ' + (err.code || err.message), true);
@@ -142,8 +152,27 @@ saveNameInput.addEventListener('keydown', e => {
   e.stopPropagation();
 });
 
+// 上書き保存: 開いている作品があればそこへ、なければ上書き先を選ぶ
+btnSaveOver.addEventListener('click', () => {
+  if (!auth.currentUser || !window.isEditorStarted()) return;
+  if (currentArtworkId) {
+    saveArtwork(currentArtworkName, currentArtworkId)
+      .then(() => showToast(`「${currentArtworkName}」に上書き保存しました`))
+      .catch(err => showToast('保存に失敗しました: ' + (err.code || err.message), true));
+  } else {
+    openGallery('overwrite');
+  }
+});
+
 // ── ギャラリー ──
-async function renderGallery() {
+// mode: 'browse' = 開く/削除、'overwrite' = 上書き先の選択
+function openGallery(mode) {
+  galleryTitle.textContent = mode === 'overwrite' ? '上書き保存する作品を選択' : 'マイギャラリー';
+  galleryModal.style.display = 'flex';
+  renderGallery(mode);
+}
+
+async function renderGallery(mode) {
   galleryList.innerHTML = '<div class="gallery-empty">読み込み中…</div>';
   const user = auth.currentUser;
   if (!user) return;
@@ -185,45 +214,70 @@ async function renderGallery() {
 
     const actions = document.createElement('div');
     actions.className = 'gallery-actions';
-    const btnOpen = document.createElement('button');
-    btnOpen.className = 'primary';
-    btnOpen.textContent = '開く';
-    btnOpen.addEventListener('click', () => {
-      try {
-        window.loadProjectData(JSON.parse(data.project));
-        currentArtworkId = d.id;
-        currentArtworkName = data.name || '無題';
-        galleryModal.style.display = 'none';
-        showToast(`「${currentArtworkName}」を開きました`);
-      } catch (err) {
-        showToast('作品データの読み込みに失敗しました', true);
-      }
-    });
-    const btnDel = document.createElement('button');
-    btnDel.className = 'danger';
-    btnDel.textContent = '削除';
-    btnDel.addEventListener('click', async () => {
-      // 2段階クリックで誤削除を防ぐ
-      if (btnDel.dataset.confirm !== '1') {
-        btnDel.dataset.confirm = '1';
-        btnDel.textContent = '本当に削除？';
-        setTimeout(() => { btnDel.dataset.confirm = ''; btnDel.textContent = '削除'; }, 2500);
-        return;
-      }
-      try {
-        await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'artworks', d.id));
-        if (currentArtworkId === d.id) { currentArtworkId = null; currentArtworkName = ''; }
-        item.remove();
-        if (!galleryList.children.length) {
-          galleryList.innerHTML = '<div class="gallery-empty">保存された作品はまだありません</div>';
+
+    if (mode === 'overwrite') {
+      // 上書きは元の絵が消える操作なので2段階クリックで確認する
+      const btnOver = document.createElement('button');
+      btnOver.className = 'primary';
+      btnOver.textContent = 'ここに上書き';
+      btnOver.addEventListener('click', async () => {
+        if (btnOver.dataset.confirm !== '1') {
+          btnOver.dataset.confirm = '1';
+          btnOver.textContent = '本当に上書き？';
+          setTimeout(() => { btnOver.dataset.confirm = ''; btnOver.textContent = 'ここに上書き'; }, 2500);
+          return;
         }
-        showToast('削除しました');
-      } catch (err) {
-        showToast('削除に失敗しました: ' + (err.code || err.message), true);
-      }
-    });
-    actions.appendChild(btnOpen);
-    actions.appendChild(btnDel);
+        const name = data.name || '無題';
+        try {
+          await saveArtwork(name, d.id);
+          setCurrentArtwork(d.id, name);
+          galleryModal.style.display = 'none';
+          showToast(`「${name}」に上書き保存しました`);
+        } catch (err) {
+          showToast('保存に失敗しました: ' + (err.code || err.message), true);
+        }
+      });
+      actions.appendChild(btnOver);
+    } else {
+      const btnOpen = document.createElement('button');
+      btnOpen.className = 'primary';
+      btnOpen.textContent = '開く';
+      btnOpen.addEventListener('click', () => {
+        try {
+          window.loadProjectData(JSON.parse(data.project));
+          setCurrentArtwork(d.id, data.name || '無題');
+          galleryModal.style.display = 'none';
+          showToast(`「${currentArtworkName}」を開きました`);
+        } catch (err) {
+          showToast('作品データの読み込みに失敗しました', true);
+        }
+      });
+      const btnDel = document.createElement('button');
+      btnDel.className = 'danger';
+      btnDel.textContent = '削除';
+      btnDel.addEventListener('click', async () => {
+        // 2段階クリックで誤削除を防ぐ
+        if (btnDel.dataset.confirm !== '1') {
+          btnDel.dataset.confirm = '1';
+          btnDel.textContent = '本当に削除？';
+          setTimeout(() => { btnDel.dataset.confirm = ''; btnDel.textContent = '削除'; }, 2500);
+          return;
+        }
+        try {
+          await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'artworks', d.id));
+          if (currentArtworkId === d.id) setCurrentArtwork(null, '');
+          item.remove();
+          if (!galleryList.children.length) {
+            galleryList.innerHTML = '<div class="gallery-empty">保存された作品はまだありません</div>';
+          }
+          showToast('削除しました');
+        } catch (err) {
+          showToast('削除に失敗しました: ' + (err.code || err.message), true);
+        }
+      });
+      actions.appendChild(btnOpen);
+      actions.appendChild(btnDel);
+    }
 
     item.appendChild(img);
     item.appendChild(info);
@@ -232,10 +286,7 @@ async function renderGallery() {
   });
 }
 
-btnGallery.addEventListener('click', () => {
-  galleryModal.style.display = 'flex';
-  renderGallery();
-});
+btnGallery.addEventListener('click', () => openGallery('browse'));
 
 btnGalleryClose.addEventListener('click', () => {
   galleryModal.style.display = 'none';

@@ -12,6 +12,7 @@
 <!-- ヘッダー -->
 <header>
   <h1>ドット絵エディタ</h1>
+  <span class="artwork-chip" id="artwork-chip" style="display:none" title="開いているクラウド作品">📄 <span id="artwork-chip-name"></span></span>
   <div class="header-sep"></div>
   <div class="bg-switcher">
     <button class="bg-btn active" data-bg="#ffffff" title="白" style="background:#ffffff;"></button>
@@ -23,7 +24,8 @@
   <button id="btn-clear" class="danger">クリア</button>
   <button id="btn-download" class="primary">↓ <span class="hide-mobile">PNG</span>保存</button>
   <button id="btn-download-transparent" class="primary">↓ <span class="hide-mobile">透過</span>保存</button>
-  <button id="btn-cloud-save" style="display:none">☁ <span class="hide-mobile">クラウド</span>保存</button>
+  <button id="btn-cloud-save-new" style="display:none">☁ <span class="hide-mobile">新規</span>保存</button>
+  <button id="btn-cloud-save-over" style="display:none">☁ <span class="hide-mobile">上書き</span>保存</button>
   <button id="btn-gallery" style="display:none">🖼 <span class="hide-mobile">ギャラリー</span></button>
   <button id="btn-login" style="display:none">G <span class="hide-mobile">ログイン</span></button>
   <div class="user-chip" id="user-chip" style="display:none">
@@ -317,7 +319,7 @@
 <!-- ギャラリーモーダル -->
 <div class="confirm-modal" id="gallery-modal" style="display:none">
   <div class="confirm-card gallery-card">
-    <p>マイギャラリー</p>
+    <p id="gallery-title">マイギャラリー</p>
     <div class="gallery-list" id="gallery-list"></div>
     <div class="confirm-actions">
       <button id="btn-gallery-close">閉じる</button>

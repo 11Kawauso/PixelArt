@@ -1054,3 +1054,24 @@ input, select, textarea {
   pointer-events: none;
 }
 .cloud-toast.error { background: var(--danger); }
+
+/* ── 開いているクラウド作品の表示チップ ── */
+.artwork-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 3px 10px;
+  max-width: 200px;
+  white-space: nowrap;
+}
+.artwork-chip #artwork-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .artwork-chip { max-width: 90px; }
+}
