@@ -1060,13 +1060,14 @@ function updateLayerPanel() {
 function startLayerDrag(e, layerIdx, item) {
   e.preventDefault();
   e.stopPropagation();
-  const handle = e.currentTarget;
   const snap = layersSnapshot(); // ドラッグ前の状態（Undo用）
   const displayItems = () => [...layerListEl.children];
   const startDisplay = displayItems().indexOf(item);
   let curDisplay = startDisplay;
   item.classList.add('dragging');
-  handle.setPointerCapture(e.pointerId);
+  // 注意: ドラッグ中の項目(item)自体をinsertBeforeで動かしてはいけない。
+  // 要素が一瞬DOMから外れるとポインタキャプチャが失われ、ドラッグが
+  // 途中で切れてしまう。入れ替えは必ず相手側の項目を動かして実現する。
 
   const onMove = ev => {
     // 隣の項目の中点をポインタが越えたら1つ入れ替える。
@@ -1075,29 +1076,23 @@ function startLayerDrag(e, layerIdx, item) {
       const list = displayItems();
       const idx = list.indexOf(item);
       const next = list[idx + 1];
-      if (next) {
-        const r = next.getBoundingClientRect();
-        if (ev.clientY > r.top + r.height / 2) {
-          layerListEl.insertBefore(next, item);
-          continue;
-        }
+      if (next && ev.clientY > next.getBoundingClientRect().top + next.getBoundingClientRect().height / 2) {
+        layerListEl.insertBefore(next, item); // 下の項目を自分の上へ
+        continue;
       }
       const prev = list[idx - 1];
-      if (prev) {
-        const r = prev.getBoundingClientRect();
-        if (ev.clientY < r.top + r.height / 2) {
-          layerListEl.insertBefore(item, prev);
-          continue;
-        }
+      if (prev && ev.clientY < prev.getBoundingClientRect().top + prev.getBoundingClientRect().height / 2) {
+        layerListEl.insertBefore(prev, item.nextSibling); // 上の項目を自分の下へ
+        continue;
       }
       break;
     }
     curDisplay = displayItems().indexOf(item);
   };
   const onUp = () => {
-    handle.removeEventListener('pointermove', onMove);
-    handle.removeEventListener('pointerup', onUp);
-    handle.removeEventListener('pointercancel', onUp);
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onUp);
+    window.removeEventListener('pointercancel', onUp);
     item.classList.remove('dragging');
     if (curDisplay !== startDisplay) {
       pushSnapshot(snap);
@@ -1111,9 +1106,9 @@ function startLayerDrag(e, layerIdx, item) {
     }
     updateLayerPanel();
   };
-  handle.addEventListener('pointermove', onMove);
-  handle.addEventListener('pointerup', onUp);
-  handle.addEventListener('pointercancel', onUp);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', onUp);
+  window.addEventListener('pointercancel', onUp);
 }
 
 // レイヤー名のインライン編集。Enterまたはフォーカスアウトで確定する。
