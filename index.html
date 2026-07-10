@@ -23,6 +23,13 @@
   <button id="btn-clear" class="danger">クリア</button>
   <button id="btn-download" class="primary">↓ <span class="hide-mobile">PNG</span>保存</button>
   <button id="btn-download-transparent" class="primary">↓ <span class="hide-mobile">透過</span>保存</button>
+  <button id="btn-cloud-save" style="display:none">☁ <span class="hide-mobile">クラウド</span>保存</button>
+  <button id="btn-gallery" style="display:none">🖼 <span class="hide-mobile">ギャラリー</span></button>
+  <button id="btn-login" style="display:none">G <span class="hide-mobile">ログイン</span></button>
+  <div class="user-chip" id="user-chip" style="display:none">
+    <img id="user-avatar" alt="" referrerpolicy="no-referrer">
+    <button id="btn-logout" title="ログアウト">⏻</button>
+  </div>
 </header>
 
 <!-- メイン -->
@@ -307,6 +314,33 @@
   <span>グリッド: <b id="stat-grid">32×32</b></span>
 </div>
 
+<!-- ギャラリーモーダル -->
+<div class="confirm-modal" id="gallery-modal" style="display:none">
+  <div class="confirm-card gallery-card">
+    <p>マイギャラリー</p>
+    <div class="gallery-list" id="gallery-list"></div>
+    <div class="confirm-actions">
+      <button id="btn-gallery-close">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 作品名入力モーダル -->
+<div class="confirm-modal" id="save-name-modal" style="display:none">
+  <div class="confirm-card">
+    <p>作品名を付けて保存</p>
+    <input type="text" id="save-name-input" class="save-name-input" maxlength="30" placeholder="作品名">
+    <div class="confirm-actions">
+      <button id="btn-save-ok" class="primary">保存</button>
+      <button id="btn-save-cancel">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- 通知トースト -->
+<div class="cloud-toast" id="cloud-toast" style="display:none"></div>
+
 <script src="script.js"></script>
+<script type="module" src="cloud.js"></script>
 </body>
 </html>

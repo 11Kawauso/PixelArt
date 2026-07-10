@@ -2209,6 +2209,116 @@ document.querySelectorAll('.bg-btn').forEach(b => {
   });
 });
 
+// ── クラウド保存用のシリアライズ（cloud.jsから利用） ──
+// 保存容量・転送量を抑えるため、各レイヤーのセルは
+// 「パレット＋ランレングス圧縮した文字列」に変換する。
+// 値0は透明、1以降はpalette[値-1]の色を表す。ランは「値*連続数」で表記。
+function serializeProject() {
+  return {
+    version: 1,
+    cols, rows,
+    layers: layers.map(l => {
+      const palette = [];
+      const paletteMap = new Map();
+      const flat = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const v = l.cells[r][c];
+          if (!v) { flat.push(0); continue; }
+          let idx = paletteMap.get(v);
+          if (idx === undefined) {
+            palette.push(v);
+            idx = palette.length;
+            paletteMap.set(v, idx);
+          }
+          flat.push(idx);
+        }
+      }
+      const runs = [];
+      let run = 1;
+      for (let i = 1; i <= flat.length; i++) {
+        if (i < flat.length && flat[i] === flat[i - 1]) { run++; continue; }
+        runs.push(run > 1 ? `${flat[i - 1]}*${run}` : `${flat[i - 1]}`);
+        run = 1;
+      }
+      return {
+        name: l.name,
+        visible: l.visible,
+        opacity: l.opacity,
+        locked: l.locked,
+        palette,
+        data: runs.join(','),
+      };
+    }),
+  };
+}
+
+function decodeLayerCells(sl, c, r) {
+  const cells = makeCells(c, r);
+  if (!sl.data) return cells;
+  let p = 0;
+  const put = idx => {
+    if (p >= c * r) return;
+    if (idx > 0) cells[Math.floor(p / c)][p % c] = sl.palette[idx - 1] || null;
+    p++;
+  };
+  for (const token of sl.data.split(',')) {
+    const [v, n] = token.split('*');
+    const idx = parseInt(v, 10) || 0;
+    const count = n ? parseInt(n, 10) : 1;
+    for (let i = 0; i < count; i++) put(idx);
+  }
+  return cells;
+}
+
+// 保存データからエディタの状態を丸ごと復元する
+function loadProjectData(p) {
+  cols = Math.max(4, Math.min(256, p.cols));
+  rows = Math.max(4, Math.min(256, p.rows));
+  layers = p.layers.map(sl => ({
+    name: sl.name || 'レイヤー',
+    visible: sl.visible !== false,
+    opacity: typeof sl.opacity === 'number' ? sl.opacity : 1,
+    locked: !!sl.locked,
+    cells: decodeLayerCells(sl, cols, rows),
+  }));
+  if (!layers.length) layers = [makeLayer('レイヤー1')];
+  activeLayerIndex = layers.length - 1;
+  layerNameCounter = layers.length + 1;
+  syncActiveCells();
+  history = [];
+  document.getElementById('btn-undo').disabled = true;
+  started = true;
+  overlay.style.display = 'none';
+  document.getElementById('stat-grid').textContent = `${cols}×${rows}`;
+  resizeCanvases();
+  syncSlidersToGrid();
+  updateLayerPanel();
+  centerCanvas();
+}
+
+// ギャラリー一覧用のサムネイル（合成後の絵の等倍PNG）
+function projectThumbnailDataURL() {
+  const cv = document.createElement('canvas');
+  cv.width = cols;
+  cv.height = rows;
+  const ctx = cv.getContext('2d');
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const color = compositeAt(r, c);
+      if (color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(c, r, 1, 1);
+      }
+    }
+  }
+  return cv.toDataURL('image/png');
+}
+
+function isEditorStarted() {
+  return started;
+}
+
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();
 buildCustomPalette();

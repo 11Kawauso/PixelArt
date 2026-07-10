@@ -939,3 +939,118 @@ input, select, textarea {
   background: var(--surface);
   transition: none; /* 追従が遅れないようにする */
 }
+
+/* ── クラウド保存・ログイン ── */
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.user-chip img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+}
+#btn-logout {
+  width: 28px;
+  padding: 0;
+}
+.gallery-card {
+  width: min(440px, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.gallery-list {
+  flex: 1;
+  min-height: 60px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+.gallery-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.gallery-thumb {
+  width: 48px;
+  height: 48px;
+  min-width: 48px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background-image:
+    linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%),
+    linear-gradient(45deg, #ddd 25%, transparent 25%, transparent 75%, #ddd 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 5px;
+  background-color: #fff;
+}
+.gallery-info {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+.gallery-name {
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gallery-date {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+.gallery-actions {
+  display: flex;
+  gap: 5px;
+  flex-shrink: 0;
+}
+.gallery-actions button {
+  padding: 4px 10px;
+  height: 26px;
+  font-size: 11px;
+}
+.gallery-empty {
+  padding: 20px 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.save-name-input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  outline: none;
+}
+.save-name-input:focus { border-color: var(--accent); }
+.cloud-toast {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  pointer-events: none;
+}
+.cloud-toast.error { background: var(--danger); }
