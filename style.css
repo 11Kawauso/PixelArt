@@ -926,3 +926,16 @@ input, select, textarea {
   cursor: grabbing;
 }
 .layer-item.dragging .layer-drag-handle { cursor: grabbing; }
+
+/* ── ドラッグ中のレイヤーを浮かせる ── */
+.layer-item {
+  position: relative;
+}
+.layer-item.dragging {
+  z-index: 20;
+  opacity: 0.95;
+  transform-origin: center;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+  background: var(--surface);
+  transition: none; /* 追従が遅れないようにする */
+}

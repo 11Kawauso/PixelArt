@@ -1065,6 +1065,9 @@ function startLayerDrag(e, layerIdx, item) {
   const startDisplay = displayItems().indexOf(item);
   let curDisplay = startDisplay;
   item.classList.add('dragging');
+  // つかんだ位置（項目上端からのオフセット）を覚えて、項目がカーソルに追従して浮くようにする
+  const grabDelta = e.clientY - item.getBoundingClientRect().top;
+  let dragY = 0; // 現在適用中のtranslateY量
   // 注意: ドラッグ中の項目(item)自体をinsertBeforeで動かしてはいけない。
   // 要素が一瞬DOMから外れるとポインタキャプチャが失われ、ドラッグが
   // 途中で切れてしまう。入れ替えは必ず相手側の項目を動かして実現する。
@@ -1088,12 +1091,22 @@ function startLayerDrag(e, layerIdx, item) {
       break;
     }
     curDisplay = displayItems().indexOf(item);
+    // 入れ替え後の自然位置を基準に、カーソル位置まで浮かせる
+    // （リストの範囲外にはみ出さないようにクランプする）
+    const itemRect = item.getBoundingClientRect();
+    const naturalTop = itemRect.top - dragY;
+    const listRect = layerListEl.getBoundingClientRect();
+    let desiredTop = ev.clientY - grabDelta;
+    desiredTop = Math.max(listRect.top, Math.min(desiredTop, listRect.bottom - itemRect.height));
+    dragY = desiredTop - naturalTop;
+    item.style.transform = `translateY(${dragY}px)`;
   };
   const onUp = () => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onUp);
     item.classList.remove('dragging');
+    item.style.transform = '';
     if (curDisplay !== startDisplay) {
       pushSnapshot(snap);
       // 表示位置（上が先頭）→ layers配列のインデックス（0が最下層）に変換
