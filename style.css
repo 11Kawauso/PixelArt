@@ -1075,3 +1075,32 @@ input, select, textarea {
 @media (max-width: 640px) {
   .artwork-chip { max-width: 90px; }
 }
+
+/* ── クラウド保存ドロップダウン ── */
+.cloud-save-menu {
+  position: relative;
+  display: flex;
+}
+.cloud-save-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  min-width: 180px;
+}
+.cloud-save-dropdown button {
+  border: none;
+  justify-content: flex-start;
+  white-space: nowrap;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -32,6 +32,9 @@ const btnLogin = document.getElementById('btn-login');
 const btnLogout = document.getElementById('btn-logout');
 const userChip = document.getElementById('user-chip');
 const userAvatar = document.getElementById('user-avatar');
+const cloudSaveMenu = document.getElementById('cloud-save-menu');
+const btnCloudSave = document.getElementById('btn-cloud-save');
+const cloudSaveDropdown = document.getElementById('cloud-save-dropdown');
 const btnSaveNew = document.getElementById('btn-cloud-save-new');
 const btnSaveOver = document.getElementById('btn-cloud-save-over');
 const btnGallery = document.getElementById('btn-gallery');
@@ -63,19 +66,35 @@ function setCurrentArtwork(id, name) {
   if (id) {
     artworkChipName.textContent = currentArtworkName;
     artworkChip.style.display = 'inline-flex';
+    btnSaveOver.textContent = `♻️ 上書き保存（${currentArtworkName}）`;
   } else {
     artworkChip.style.display = 'none';
+    btnSaveOver.textContent = '♻️ 上書き保存（作品を選択…）';
   }
 }
+
+// ── クラウド保存ドロップダウン ──
+function closeCloudSaveMenu() {
+  cloudSaveDropdown.style.display = 'none';
+}
+
+btnCloudSave.addEventListener('click', e => {
+  e.stopPropagation();
+  cloudSaveDropdown.style.display = cloudSaveDropdown.style.display === 'none' ? 'flex' : 'none';
+});
+
+document.addEventListener('click', e => {
+  if (!cloudSaveMenu.contains(e.target)) closeCloudSaveMenu();
+});
 
 // ── 認証 ──
 onAuthStateChanged(auth, user => {
   const loggedIn = !!user;
   btnLogin.style.display = loggedIn ? 'none' : '';
   userChip.style.display = loggedIn ? 'flex' : 'none';
-  btnSaveNew.style.display = loggedIn ? '' : 'none';
-  btnSaveOver.style.display = loggedIn ? '' : 'none';
+  cloudSaveMenu.style.display = loggedIn ? '' : 'none';
   btnGallery.style.display = loggedIn ? '' : 'none';
+  if (!loggedIn) closeCloudSaveMenu();
   if (loggedIn) {
     userAvatar.src = user.photoURL || '';
     userAvatar.title = user.displayName || user.email || '';
@@ -124,6 +143,7 @@ async function saveArtwork(name, artworkId) {
 
 // 新規保存: 常に名前を付けて新しい作品として保存し、以後の上書き対象にする
 btnSaveNew.addEventListener('click', () => {
+  closeCloudSaveMenu();
   if (!auth.currentUser || !window.isEditorStarted()) return;
   saveNameInput.value = '';
   saveNameModal.style.display = 'flex';
@@ -154,6 +174,7 @@ saveNameInput.addEventListener('keydown', e => {
 
 // 上書き保存: 開いている作品があればそこへ、なければ上書き先を選ぶ
 btnSaveOver.addEventListener('click', () => {
+  closeCloudSaveMenu();
   if (!auth.currentUser || !window.isEditorStarted()) return;
   if (currentArtworkId) {
     saveArtwork(currentArtworkName, currentArtworkId)

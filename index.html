@@ -24,8 +24,13 @@
   <button id="btn-clear" class="danger">クリア</button>
   <button id="btn-download" class="primary">↓ <span class="hide-mobile">PNG</span>保存</button>
   <button id="btn-download-transparent" class="primary">↓ <span class="hide-mobile">透過</span>保存</button>
-  <button id="btn-cloud-save-new" style="display:none">☁ <span class="hide-mobile">新規</span>保存</button>
-  <button id="btn-cloud-save-over" style="display:none">☁ <span class="hide-mobile">上書き</span>保存</button>
+  <div class="cloud-save-menu" id="cloud-save-menu" style="display:none">
+    <button id="btn-cloud-save">☁ <span class="hide-mobile">クラウド</span>保存 ▾</button>
+    <div class="cloud-save-dropdown" id="cloud-save-dropdown" style="display:none">
+      <button id="btn-cloud-save-new">🆕 新規保存</button>
+      <button id="btn-cloud-save-over">♻️ 上書き保存</button>
+    </div>
+  </div>
   <button id="btn-gallery" style="display:none">🖼 <span class="hide-mobile">ギャラリー</span></button>
   <button id="btn-login" style="display:none">G <span class="hide-mobile">ログイン</span></button>
   <div class="user-chip" id="user-chip" style="display:none">
