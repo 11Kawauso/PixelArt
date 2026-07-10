@@ -47,6 +47,9 @@ const saveNameInput = document.getElementById('save-name-input');
 const btnSaveOk = document.getElementById('btn-save-ok');
 const btnSaveCancel = document.getElementById('btn-save-cancel');
 const toastEl = document.getElementById('cloud-toast');
+const logoutConfirmModal = document.getElementById('logout-confirm-modal');
+const btnLogoutOk = document.getElementById('btn-logout-ok');
+const btnLogoutCancel = document.getElementById('btn-logout-cancel');
 const artworkChip = document.getElementById('artwork-chip');
 const artworkChipName = document.getElementById('artwork-chip-name');
 
@@ -113,9 +116,18 @@ btnLogin.addEventListener('click', async () => {
   }
 });
 
-btnLogout.addEventListener('click', async () => {
+btnLogout.addEventListener('click', () => {
+  logoutConfirmModal.style.display = 'flex';
+});
+
+btnLogoutOk.addEventListener('click', async () => {
+  logoutConfirmModal.style.display = 'none';
   await signOut(auth);
   showToast('ログアウトしました');
+});
+
+btnLogoutCancel.addEventListener('click', () => {
+  logoutConfirmModal.style.display = 'none';
 });
 
 // ── 保存 ──
