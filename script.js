@@ -2165,6 +2165,36 @@ document.getElementById('btn-load-img').addEventListener('click', () => {
   fileInput.click();
 });
 
+// ── 新規キャンバス（ファイルメニュー） ─────────────────
+// サイトを開いた直後・「白紙で始める」を押した直後と同じ状態
+// （32×32・単一の空レイヤー・ズーム100%・履歴なし）に戻す。
+function resetToNewCanvas() {
+  initCells(32, 32, false);
+  setZoom(1);
+  history = [];
+  document.getElementById('btn-undo').disabled = true;
+  clearSelection();
+  resizeCanvases();
+  syncSlidersToGrid();
+  updatePresetHighlight();
+  centerCanvas();
+  if (window.clearCurrentArtwork) window.clearCurrentArtwork();
+}
+
+const newCanvasConfirmModal = document.getElementById('new-canvas-confirm-modal');
+document.getElementById('btn-new-canvas').addEventListener('click', () => {
+  if (!started) return;
+  closeFileMenu();
+  newCanvasConfirmModal.style.display = 'flex';
+});
+document.getElementById('btn-new-canvas-ok').addEventListener('click', () => {
+  newCanvasConfirmModal.style.display = 'none';
+  resetToNewCanvas();
+});
+document.getElementById('btn-new-canvas-cancel').addEventListener('click', () => {
+  newCanvasConfirmModal.style.display = 'none';
+});
+
 // ── パネルリサイズ・開閉 ──────────────────────────────
 const panel = document.getElementById('panel');
 const panelResize = document.getElementById('panel-resize');

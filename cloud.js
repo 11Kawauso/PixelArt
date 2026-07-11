@@ -62,6 +62,9 @@ function showToast(msg, isError) {
   toastTimer = setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
 }
 
+// script.jsの「新規キャンバス」から呼ばれる。開いている作品の紐付けを解除する。
+window.clearCurrentArtwork = () => setCurrentArtwork(null, '');
+
 // 開いている作品を切り替え、ヘッダーの作品名チップに反映する
 function setCurrentArtwork(id, name) {
   currentArtworkId = id;

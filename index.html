@@ -28,6 +28,8 @@
     <button id="btn-file-menu">📁 <span class="hide-mobile">ファイル</span> ▾</button>
     <div class="file-dropdown" id="file-dropdown" style="display:none">
 
+      <button id="btn-new-canvas" class="menu-item">🆕 新規キャンバス</button>
+
       <div id="save-menu-group">
         <button id="btn-menu-save" class="menu-item">💾 保存 ▸</button>
         <div class="menu-submenu" id="save-subdropdown" style="display:none">
@@ -335,6 +337,17 @@
   <span>位置: <b id="stat-pos">—</b></span>
   <span>色: <b id="stat-color">—</b></span>
   <span>グリッド: <b id="stat-grid">32×32</b></span>
+</div>
+
+<!-- 新規キャンバス確認モーダル -->
+<div class="confirm-modal" id="new-canvas-confirm-modal" style="display:none">
+  <div class="confirm-card">
+    <p>新規キャンバスを作成しますか？<br>現在の内容は失われます</p>
+    <div class="confirm-actions">
+      <button id="btn-new-canvas-ok" class="danger">作成する</button>
+      <button id="btn-new-canvas-cancel">キャンセル</button>
+    </div>
+  </div>
 </div>
 
 <!-- ログアウト確認モーダル -->
