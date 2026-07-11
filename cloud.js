@@ -321,6 +321,25 @@ async function renderGallery(mode) {
 
 btnGallery.addEventListener('click', () => openGallery('browse'));
 
+// スタート画面（白紙で始める／画像を読み込む）の「ギャラリーから開く」。
+// ログイン済みならそのままギャラリーへ、未ログインならその場でログインを
+// 促し、成功したら続けてギャラリーを開く。
+const btnStartGallery = document.getElementById('btn-start-gallery');
+btnStartGallery.addEventListener('click', async () => {
+  if (auth.currentUser) {
+    openGallery('browse');
+    return;
+  }
+  try {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+    openGallery('browse');
+  } catch (err) {
+    if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+      showToast('ログインに失敗しました: ' + (err.code || err.message), true);
+    }
+  }
+});
+
 btnGalleryClose.addEventListener('click', () => {
   galleryModal.style.display = 'none';
 });
