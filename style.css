@@ -1086,7 +1086,7 @@ input, select, textarea {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  z-index: 50;
+  z-index: 70; /* 画面右上固定のハンバーガーメニュー(.shape-menu, z-index:60)より手前にする */
   display: flex;
   flex-direction: column;
   gap: 2px;
