@@ -107,6 +107,7 @@ onAuthStateChanged(auth, user => {
 });
 
 btnLogin.addEventListener('click', async () => {
+  if (window.closeFileMenu) window.closeFileMenu();
   try {
     await signInWithPopup(auth, new GoogleAuthProvider());
   } catch (err) {
@@ -117,6 +118,7 @@ btnLogin.addEventListener('click', async () => {
 });
 
 btnLogout.addEventListener('click', () => {
+  if (window.closeFileMenu) window.closeFileMenu();
   logoutConfirmModal.style.display = 'flex';
 });
 
@@ -155,7 +157,7 @@ async function saveArtwork(name, artworkId) {
 
 // 新規保存: 常に名前を付けて新しい作品として保存し、以後の上書き対象にする
 btnSaveNew.addEventListener('click', () => {
-  closeCloudSaveMenu();
+  window.closeFileMenu();
   if (!auth.currentUser || !window.isEditorStarted()) return;
   saveNameInput.value = '';
   saveNameModal.style.display = 'flex';
@@ -186,7 +188,7 @@ saveNameInput.addEventListener('keydown', e => {
 
 // 上書き保存: 開いている作品があればそこへ、なければ上書き先を選ぶ
 btnSaveOver.addEventListener('click', () => {
-  closeCloudSaveMenu();
+  window.closeFileMenu();
   if (!auth.currentUser || !window.isEditorStarted()) return;
   if (currentArtworkId) {
     saveArtwork(currentArtworkName, currentArtworkId)
@@ -319,7 +321,10 @@ async function renderGallery(mode) {
   });
 }
 
-btnGallery.addEventListener('click', () => openGallery('browse'));
+btnGallery.addEventListener('click', () => {
+  window.closeFileMenu();
+  openGallery('browse');
+});
 
 // スタート画面（白紙で始める／画像を読み込む）の「ギャラリーから開く」。
 // ログイン済みならそのままギャラリーへ、未ログインならその場でログインを

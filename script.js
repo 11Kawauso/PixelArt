@@ -1838,8 +1838,50 @@ document.getElementById('btn-clear').addEventListener('click', () => {
   updateLayerPanel();
 });
 
+// ── ファイルメニュー ──────────────────────────────────
+// 「保存」「クラウド保存」のように入れ子のサブメニューを持つドロップダウン。
+// cloud.js（クラウド保存・ギャラリー・ログイン）からも window.closeFileMenu()
+// として呼び出され、操作後にメニュー全体を閉じるのに使われる。
+const fileMenu = document.getElementById('file-menu');
+const btnFileMenu = document.getElementById('btn-file-menu');
+const fileDropdown = document.getElementById('file-dropdown');
+const btnMenuSave = document.getElementById('btn-menu-save');
+const saveSubdropdown = document.getElementById('save-subdropdown');
+
+function closeFileMenu() {
+  fileDropdown.style.display = 'none';
+  saveSubdropdown.style.display = 'none';
+  const cloudDD = document.getElementById('cloud-save-dropdown');
+  if (cloudDD) cloudDD.style.display = 'none';
+}
+window.closeFileMenu = closeFileMenu;
+
+btnFileMenu.addEventListener('click', e => {
+  e.stopPropagation();
+  if (fileDropdown.style.display === 'none') {
+    fileDropdown.style.display = 'flex';
+  } else {
+    closeFileMenu();
+  }
+});
+
+btnMenuSave.addEventListener('click', e => {
+  e.stopPropagation();
+  const opening = saveSubdropdown.style.display === 'none';
+  saveSubdropdown.style.display = opening ? 'flex' : 'none';
+  if (!opening) {
+    const cloudDD = document.getElementById('cloud-save-dropdown');
+    if (cloudDD) cloudDD.style.display = 'none';
+  }
+});
+
+document.addEventListener('click', e => {
+  if (!fileMenu.contains(e.target)) closeFileMenu();
+});
+
 // ── ダウンロード ──────────────────────────────────────
 document.getElementById('btn-download').addEventListener('click', () => {
+  closeFileMenu();
   const out = document.createElement('canvas');
   const px = Math.max(1, Math.round(512 / Math.max(cols, rows)));
   out.width  = cols * px;
@@ -1863,6 +1905,7 @@ document.getElementById('btn-download').addEventListener('click', () => {
 });
 
 document.getElementById('btn-download-transparent').addEventListener('click', () => {
+  closeFileMenu();
   const out = document.createElement('canvas');
   const px = Math.max(1, Math.round(512 / Math.max(cols, rows)));
   out.width  = cols * px;

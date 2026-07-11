@@ -958,10 +958,6 @@ input, select, textarea {
   border: 1px solid var(--border-strong);
   background: var(--bg);
 }
-#btn-logout {
-  width: 28px;
-  padding: 0;
-}
 .gallery-card {
   width: min(440px, 92vw);
   max-height: 80vh;
@@ -1081,12 +1077,12 @@ input, select, textarea {
   .artwork-chip { max-width: 90px; }
 }
 
-/* ── クラウド保存ドロップダウン ── */
-.cloud-save-menu {
+/* ── ファイルメニュー（保存・ギャラリー・ログイン等をまとめたドロップダウン） ── */
+.file-menu {
   position: relative;
   display: flex;
 }
-.cloud-save-dropdown {
+.file-dropdown {
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
@@ -1099,13 +1095,25 @@ input, select, textarea {
   border: 1px solid var(--border-strong);
   border-radius: var(--radius);
   box-shadow: 0 6px 16px rgba(0,0,0,0.15);
-  min-width: 180px;
+  min-width: 200px;
 }
-.cloud-save-dropdown button {
+.menu-item {
   border: none;
   justify-content: flex-start;
   white-space: nowrap;
-  max-width: 280px;
+  width: 100%;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* 保存＞クラウド保存のような入れ子のサブメニュー。フライアウトではなく
+   親項目の下にインデントして展開する（絶対配置にすると入れ子のたびに
+   基準要素を用意する必要があり複雑になるため）。 */
+.menu-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 10px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
 }
