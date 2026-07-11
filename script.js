@@ -1964,7 +1964,11 @@ function loadImageFile(file) {
     img.onload = () => {
       uploadedImage = img;
       document.getElementById('btn-convert').disabled = false;
-      dropZone.innerHTML = `<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="display:block;margin:0 auto 4px"><path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2M12 4v12m-4-4l4-4 4 4"/></svg>${file.name}`;
+      // SVGアイコンは定数なのでinnerHTMLで挿入するが、file.nameは
+      // ユーザー由来なのでテキストノードとして追加する（HTMLとして解釈させない）。
+      // 直接innerHTMLに埋め込むと、細工したファイル名によるDOM XSSになる。
+      dropZone.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="display:block;margin:0 auto 4px"><path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2M12 4v12m-4-4l4-4 4 4"/></svg>';
+      dropZone.appendChild(document.createTextNode(file.name));
       if (!started) startEditor();
     };
     img.src = e.target.result;
