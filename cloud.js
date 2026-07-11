@@ -97,6 +97,7 @@ onAuthStateChanged(auth, user => {
   userChip.style.display = loggedIn ? 'flex' : 'none';
   cloudSaveMenu.style.display = loggedIn ? '' : 'none';
   btnGallery.style.display = loggedIn ? '' : 'none';
+  btnLogout.style.display = loggedIn ? '' : 'none';
   if (!loggedIn) closeCloudSaveMenu();
   if (loggedIn) {
     userAvatar.src = user.photoURL || '';
