@@ -1256,6 +1256,21 @@ btnLayerLock.addEventListener('click', () => {
   updateLayerPanel();
 });
 
+// ── レイヤーの反転 ────────────────────────────────────
+function flipLayer(direction) {
+  if (!started || activeLayerLocked()) return;
+  pushHistory();
+  const layer = layers[activeLayerIndex];
+  layer.cells = direction === 'h'
+    ? layer.cells.map(row => [...row].reverse())
+    : [...layer.cells].reverse().map(row => [...row]);
+  syncActiveCells();
+  drawCells();
+  updateLayerThumbnails();
+}
+document.getElementById('btn-layer-flip-h').addEventListener('click', () => flipLayer('h'));
+document.getElementById('btn-layer-flip-v').addEventListener('click', () => flipLayer('v'));
+
 // ── 色履歴の位置更新 ──────────────────────────────────
 const colorHistoryEl = document.getElementById('color-history');
 function updateColorHistoryPos(panelEdge) {
