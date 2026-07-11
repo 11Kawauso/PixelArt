@@ -490,6 +490,11 @@ input, select, textarea {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* パディングとキャンバスの合計サイズどおりにスクロール領域を確保する。
+     これがないとborder-boxの影響で内容が潰れ、キャンバスの実位置が
+     centerCanvas()の計算とずれる */
+  width: max-content;
+  height: max-content;
   min-width: 100%;
   min-height: 100%;
 }

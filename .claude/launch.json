@@ -4,7 +4,7 @@
     {
       "name": "pixelart",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8123"],
+      "runtimeArgs": ["dev_server.py", "8123"],
       "port": 8123
     }
   ]

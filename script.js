@@ -2327,3 +2327,13 @@ initCells(cols, rows, false);
 resizeCanvases();
 syncTogglePosition();
 updateColorHistoryPos();
+// 初期表示でもキャンバスを中央に配置する。読み込み直後はレイアウトが
+// 確定しきっていないことがあるため、タスクを分けて余白を再計算してから
+// 中央へスクロールする。requestAnimationFrameは非表示タブで発火しないため
+// 使わない（バックグラウンドで開かれた場合に中央にならなくなる）。
+function centerCanvasOnBoot() {
+  updateScrollPadding();
+  centerCanvas();
+}
+setTimeout(centerCanvasOnBoot, 0);
+window.addEventListener('load', centerCanvasOnBoot);
