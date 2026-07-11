@@ -813,12 +813,15 @@ cOv.addEventListener('mouseleave',() => {
   statPos.textContent = '—';
 });
 
-// タッチ対応（1本指：描画、2本指：ピンチズーム＋パン）
+// タッチ対応（1本指：描画・選択・図形／2本指：ピンチズーム＋パン）
+// 1本指側は、マウスのmousedown/mousemove/mouseupと同じ分岐
+// （選択モード・図形ツール・通常描画）をすべて再現する。
 let pinchStartDist = 0;
 let pinchStartZoom = 1;
 let isPinching = false;
-let pinchStartScrollX = 0, pinchStartScrollY = 0;
-let pinchStartCX = 0, pinchStartCY = 0;
+// ピンチ開始時に指の中心にあったセル座標（zoomに依存しない値）。
+// ズーム中も常にこの点が指の中心の下に留まるようスクロールを補正する。
+let pinchContentX = 0, pinchContentY = 0;
 
 function getTouchDist(e) {
   const t0 = e.touches[0], t1 = e.touches[1];
@@ -831,6 +834,103 @@ function getTouchCenter(e) {
   return { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
 }
 
+function touchPointerDown(col, row) {
+  if (selectionMode === 'range') {
+    rangeStart = {col, row};
+    rangePath = [{col, row}];
+    return;
+  }
+  if (selectionMode === 'color') {
+    applyColorSelection(col, row);
+    selectionMode = 'none';
+    updateSelectionButtons();
+    return;
+  }
+  if (selectionMode === 'flood') {
+    applyFloodSelection(col, row);
+    selectionMode = 'none';
+    updateSelectionButtons();
+    return;
+  }
+  if (currentTool === 'shape') {
+    if (activeLayerLocked()) return;
+    shapeStart = {col, row};
+    return;
+  }
+  if (activeLayerLocked() && currentTool !== 'pick') return;
+  pushHistory();
+  isPainting = true;
+  lastCell = {col, row};
+  applyToolSingle(col, row);
+  drawCells();
+}
+
+function touchPointerMove(col, row) {
+  if (selectionMode === 'range' && rangeStart) {
+    if (rangeSelectMode === 'free') {
+      const last = rangePath[rangePath.length - 1];
+      if (last.col !== col || last.row !== row) {
+        for (const p of interpolateCells(last.col, last.row, col, row)) {
+          const lp = rangePath[rangePath.length - 1];
+          if (!lp || lp.col !== p.col || lp.row !== p.row) rangePath.push(p);
+        }
+      }
+      drawFreeRangePreview(rangePath, col, row);
+    } else {
+      drawRangePreview(rangeStart.col, rangeStart.row, col, row);
+    }
+    return;
+  }
+  if (currentTool === 'shape' && shapeStart) {
+    if (shapeType === 'line') {
+      drawLinePreview(shapeStart.col, shapeStart.row, col, row);
+    } else if (shapeType === 'heart' && heartImage) {
+      drawHeartImagePreview(shapeFill, shapeStart.col, shapeStart.row, col, row);
+    } else {
+      drawShapePreview(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
+    }
+    return;
+  }
+  if (!isPainting) return;
+  if (lastCell && lastCell.col === col && lastCell.row === row) return;
+  applyToolLine(lastCell.col, lastCell.row, col, row);
+  lastCell = {col, row};
+}
+
+function touchPointerUp(col, row) {
+  if (selectionMode === 'range' && rangeStart) {
+    if (rangeSelectMode === 'free') {
+      applyFreeRangeSelection(rangePath, col, row);
+    } else {
+      applyRangeSelection(rangeStart.col, rangeStart.row, col, row);
+    }
+    rangeStart = null;
+    rangePath = [];
+    selectionMode = 'none';
+    updateSelectionButtons();
+    return;
+  }
+  if (currentTool === 'shape' && shapeStart) {
+    pushHistory();
+    if (shapeType === 'line') {
+      applyLineToCells(shapeStart.col, shapeStart.row, col, row);
+    } else if (shapeType === 'heart' && heartImage) {
+      applyHeartImageToCells(shapeFill, shapeStart.col, shapeStart.row, col, row);
+    } else {
+      applyShapeToCells(shapeType, shapeFill, shapeStart.col, shapeStart.row, col, row);
+    }
+    shapeStart = null;
+    drawCells();
+    updateLayerThumbnails();
+    const ctx = cOv.getContext('2d');
+    ctx.clearRect(0, 0, cOv.width, cOv.height);
+    drawSelectionOverlay(ctx);
+    return;
+  }
+  if (isPainting) updateLayerThumbnails();
+  isPainting = false; lastCell = null;
+}
+
 cOv.addEventListener('touchstart', e => {
   e.preventDefault();
   if (e.touches.length >= 2) {
@@ -839,23 +939,17 @@ cOv.addEventListener('touchstart', e => {
     isPinching = true;
     pinchStartDist = getTouchDist(e);
     pinchStartZoom = zoom;
-    pinchStartScrollX = canvasArea.scrollLeft;
-    pinchStartScrollY = canvasArea.scrollTop;
     const ctr = getTouchCenter(e);
-    pinchStartCX = ctr.x;
-    pinchStartCY = ctr.y;
+    const wrapRect = wrap.getBoundingClientRect();
+    pinchContentX = (ctr.x - wrapRect.left) / pinchStartZoom;
+    pinchContentY = (ctr.y - wrapRect.top) / pinchStartZoom;
     return;
   }
   if (!started) return;
   isPinching = false;
-  if (activeLayerLocked() && currentTool !== 'pick') return;
-  pushHistory();
-  isPainting = true;
   const t = e.touches[0];
   const {col, row} = getCell(t);
-  lastCell = {col, row};
-  applyToolSingle(col, row);
-  drawCells();
+  touchPointerDown(col, row);
 }, {passive: false});
 
 cOv.addEventListener('touchmove', e => {
@@ -864,31 +958,34 @@ cOv.addEventListener('touchmove', e => {
     const dist = getTouchDist(e);
     const scale = dist / pinchStartDist;
     const newZoom = Math.max(0.5, Math.min(8, pinchStartZoom * scale));
-    const zoomRatio = newZoom / pinchStartZoom;
 
+    setZoom(newZoom); // zoomは内部で0.5〜8にクランプされる
+
+    // パディング量がzoomに応じて非線形に変わる（updateScrollPadding参照）ため、
+    // 比率計算ではなく、実際にレイアウトされたwrapの位置を測定して補正する
+    // （マウスホイールズームと同じ方式。詳細はそちらのコメント参照）。
     const ctr = getTouchCenter(e);
-    const areaRect = canvasArea.getBoundingClientRect();
-    const pointX = pinchStartScrollX + (pinchStartCX - areaRect.left);
-    const pointY = pinchStartScrollY + (pinchStartCY - areaRect.top);
-
-    setZoom(newZoom);
-
-    canvasArea.scrollLeft = pointX * zoomRatio - (ctr.x - areaRect.left);
-    canvasArea.scrollTop  = pointY * zoomRatio - (ctr.y - areaRect.top);
+    const wrapRectNow = wrap.getBoundingClientRect();
+    const desiredLeft = ctr.x - pinchContentX * zoom;
+    const desiredTop = ctr.y - pinchContentY * zoom;
+    canvasArea.scrollLeft += wrapRectNow.left - desiredLeft;
+    canvasArea.scrollTop  += wrapRectNow.top - desiredTop;
     return;
   }
-  if (!isPainting || !started) return;
+  if (!started) return;
   const t = e.touches[0];
   const {col, row} = getCell(t);
-  if (lastCell && lastCell.col === col && lastCell.row === row) return;
-  applyToolLine(lastCell.col, lastCell.row, col, row);
-  lastCell = {col, row};
+  touchPointerMove(col, row);
 }, {passive: false});
 
 cOv.addEventListener('touchend', e => {
   if (e.touches.length < 2) isPinching = false;
-  if (e.touches.length === 0) {
-    if (isPainting) updateLayerThumbnails();
+  if (e.touches.length > 0) return;
+  const t = e.changedTouches[0];
+  if (t && started) {
+    const {col, row} = getCell(t);
+    touchPointerUp(col, row);
+  } else {
     isPainting = false; lastCell = null;
   }
 });
