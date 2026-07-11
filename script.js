@@ -1770,13 +1770,31 @@ function setZoom(z) {
 document.getElementById('btn-zoom-in').addEventListener('click',  () => setZoom(zoom * 1.5));
 document.getElementById('btn-zoom-out').addEventListener('click', () => setZoom(zoom / 1.5));
 
-// マウスホイールズーム
+// マウスホイールズーム（カーソル位置を中心に拡縮する）
+// パディング量がzoomに応じて非線形に変わる（updateScrollPadding参照）ため、
+// スクロール量を比率計算で求めることはできない。ズーム前後で実際に
+// レイアウトされたwrapの画面上の位置を測定し、カーソル直下にあった
+// セル座標がズーム後も同じ画面位置に留まるようスクロール位置を補正する。
 document.getElementById('canvas-area').addEventListener('wheel', e => {
   if (!e.ctrlKey && !e.metaKey) return;
   e.preventDefault();
   const delta = -e.deltaY * (e.deltaMode === 1 ? 20 : 1);
   const factor = 1 + Math.min(Math.abs(delta) * 0.002, 0.15);
-  setZoom(delta > 0 ? zoom * factor : zoom / factor);
+  const newZoom = delta > 0 ? zoom * factor : zoom / factor;
+
+  const oldZoom = zoom;
+  const wrapRectBefore = wrap.getBoundingClientRect();
+  // カーソル直下のセル座標（zoomに依存しない値）を記録
+  const contentX = (e.clientX - wrapRectBefore.left) / oldZoom;
+  const contentY = (e.clientY - wrapRectBefore.top) / oldZoom;
+
+  setZoom(newZoom); // zoomは内部で0.5〜8にクランプされる
+
+  const wrapRectAfter = wrap.getBoundingClientRect();
+  const desiredLeft = e.clientX - contentX * zoom;
+  const desiredTop = e.clientY - contentY * zoom;
+  canvasArea.scrollLeft += wrapRectAfter.left - desiredLeft;
+  canvasArea.scrollTop  += wrapRectAfter.top - desiredTop;
 }, {passive: false});
 
 // ── 右クリックドラッグでパン ──────────────────────────
