@@ -770,7 +770,14 @@ cOv.addEventListener('mousemove', e => {
   statColor.textContent = c || '—';
   if (!isPainting) return;
   if (lastCell && lastCell.col === col && lastCell.row === row) return;
-  applyToolLine(lastCell.col, lastCell.row, col, row);
+  if (!lastCell) {
+    // キャンバス外に出て戻ってきた直後。出た地点と直線でつながず、
+    // 再進入地点から新しい線として描き始める。
+    applyToolSingle(col, row);
+    drawCells();
+  } else {
+    applyToolLine(lastCell.col, lastCell.row, col, row);
+  }
   lastCell = {col, row};
 });
 document.addEventListener('mouseup', e => {
@@ -811,6 +818,10 @@ document.addEventListener('mouseup', e => {
 cOv.addEventListener('mouseleave',() => {
   cOv.getContext('2d').clearRect(0,0,cOv.width,cOv.height);
   statPos.textContent = '—';
+  // 描画中にキャンバス外へ出たら線をいったん打ち切る。
+  // これを消さないと、反対側から再進入したときに出た地点と
+  // 入った地点が直線補間でつながって描画されてしまう。
+  lastCell = null;
 });
 
 // タッチ対応（1本指：描画・選択・図形／2本指：ピンチズーム＋パン）
