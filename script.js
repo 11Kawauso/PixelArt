@@ -46,6 +46,7 @@ let heartImage = null; // ハート図形に使う差し替え用の画像（用
 
 // ── DOM ───────────────────────────────────────────────
 const cBg  = document.getElementById('canvas-bg');
+const cTrace = document.getElementById('canvas-trace');
 const cMain= document.getElementById('canvas-main');
 const cOv  = document.getElementById('canvas-overlay');
 const wrap = document.getElementById('canvas-wrap');
@@ -149,15 +150,16 @@ function updateScrollPadding() {
 
 function resizeCanvases() {
   const {w, h} = canvasSize();
-  [cBg, cMain, cOv].forEach(c => { c.width = w; c.height = h; });
+  [cBg, cTrace, cMain, cOv].forEach(c => { c.width = w; c.height = h; });
   wrap.style.width  = (w * zoom) + 'px';
   wrap.style.height = (h * zoom) + 'px';
-  [cBg, cMain, cOv].forEach(c => {
+  [cBg, cTrace, cMain, cOv].forEach(c => {
     c.style.width  = (w * zoom) + 'px';
     c.style.height = (h * zoom) + 'px';
   });
   updateScrollPadding();
   drawAll();
+  drawTraceImage(); // width/height変更でクリアされるため描き直す
 }
 
 function drawAll() {
@@ -1883,7 +1885,7 @@ function setZoom(z) {
   const {w, h} = canvasSize();
   wrap.style.width  = (w * zoom) + 'px';
   wrap.style.height = (h * zoom) + 'px';
-  [cBg, cMain, cOv].forEach(c => {
+  [cBg, cTrace, cMain, cOv].forEach(c => {
     c.style.width  = (w * zoom) + 'px';
     c.style.height = (h * zoom) + 'px';
   });
@@ -2113,6 +2115,111 @@ function syncSlidersToGrid() {
   updatePresetHighlight();
 }
 
+// ── トレース（下描き用の参考画像） ────────────────────
+// ドット絵に変換せず、選んだ画像をそのままキャンバスの裏に薄く表示するだけの機能。
+// レイヤー・履歴（Undo）・保存（PNG/クラウド）のいずれにも含まれない、
+// あくまで画面上の下描きガイド。
+let traceImage = null;
+let traceOpacity = 0.5;
+
+const traceDropZone = document.getElementById('trace-drop-zone');
+const traceFileInput = document.getElementById('trace-file-input');
+const traceResizeCheckbox = document.getElementById('trace-resize-canvas');
+const traceOpacitySlider = document.getElementById('trace-opacity');
+const traceOpacityVal = document.getElementById('trace-opacity-val');
+const btnTraceRemove = document.getElementById('btn-trace-remove');
+
+// レターボックス（縦横比を保ってキャンバス内に収める）で描画する。
+// resizeCanvasesでキャンバスの実ピクセルサイズが変わると内容が消えるため、
+// リサイズ後は必ず呼び直す想定。
+function drawTraceImage() {
+  const ctx = cTrace.getContext('2d');
+  ctx.clearRect(0, 0, cTrace.width, cTrace.height);
+  if (!traceImage) return;
+  const scale = Math.min(cTrace.width / traceImage.width, cTrace.height / traceImage.height);
+  const w = traceImage.width * scale;
+  const h = traceImage.height * scale;
+  ctx.globalAlpha = traceOpacity;
+  ctx.drawImage(traceImage, (cTrace.width - w) / 2, (cTrace.height - h) / 2, w, h);
+  ctx.globalAlpha = 1;
+}
+
+function updateTraceUI() {
+  btnTraceRemove.style.display = traceImage ? '' : 'none';
+}
+
+function clearTraceImage() {
+  traceImage = null;
+  drawTraceImage();
+  updateTraceUI();
+}
+
+// チェックが入っている場合、画像のアスペクト比に合わせてキャンバスサイズを
+// 変更する（既存の描画内容は保持したまま。画像から変換の同名チェックボックスとは異なり、
+// トレースは絵を消す機能ではないためkeepOld=trueにする）。
+function applyTraceCanvasResize() {
+  if (!traceImage) return;
+  const maxDim = Math.max(cols, rows);
+  const aspect = traceImage.width / traceImage.height;
+  let newCols, newRows;
+  if (aspect >= 1) {
+    newCols = maxDim;
+    newRows = Math.max(1, Math.round(maxDim / aspect));
+  } else {
+    newRows = maxDim;
+    newCols = Math.max(1, Math.round(maxDim * aspect));
+  }
+  newCols = Math.min(256, newCols);
+  newRows = Math.min(256, newRows);
+  pushHistory();
+  initCells(newCols, newRows, true);
+  resizeCanvases();
+  syncSlidersToGrid();
+}
+
+function loadTraceImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      traceImage = img;
+      if (!started) startEditor();
+      if (traceResizeCheckbox.checked) applyTraceCanvasResize();
+      // アイコン(定数)とファイル名(ユーザー由来)を分ける。file.nameをinnerHTMLに
+      // 直接埋め込むとDOM XSSになるため、テキストノードとして追加する。
+      traceDropZone.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="display:block;margin:0 auto 4px"><path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2M12 4v12m-4-4l4-4 4 4"/></svg>';
+      traceDropZone.appendChild(document.createTextNode(file.name));
+      drawTraceImage();
+      updateTraceUI();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+traceDropZone.addEventListener('click', () => traceFileInput.click());
+traceDropZone.addEventListener('dragover', e => { e.preventDefault(); traceDropZone.style.background = '#f0f0ee'; });
+traceDropZone.addEventListener('dragleave', () => { traceDropZone.style.background = ''; });
+traceDropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  traceDropZone.style.background = '';
+  loadTraceImageFile(e.dataTransfer.files[0]);
+});
+traceFileInput.addEventListener('change', e => loadTraceImageFile(e.target.files[0]));
+
+traceResizeCheckbox.addEventListener('change', () => {
+  if (traceResizeCheckbox.checked && traceImage) applyTraceCanvasResize();
+});
+
+traceOpacitySlider.addEventListener('input', () => {
+  traceOpacity = parseInt(traceOpacitySlider.value) / 100;
+  traceOpacityVal.textContent = traceOpacitySlider.value;
+  drawTraceImage();
+});
+
+btnTraceRemove.addEventListener('click', clearTraceImage);
+
 function convertImage(img) {
   if (!started) startEditor();
   // destC0,destR0,destW,destH: 画像を実際に描画する先の範囲（キャンバス座標）。
@@ -2301,6 +2408,7 @@ function resetToNewCanvas() {
   history = [];
   document.getElementById('btn-undo').disabled = true;
   clearSelection();
+  clearTraceImage();
   resizeCanvases();
   syncSlidersToGrid();
   updatePresetHighlight();
@@ -2509,6 +2617,7 @@ function loadProjectData(p) {
   started = true;
   overlay.style.display = 'none';
   document.getElementById('stat-grid').textContent = `${cols}×${rows}`;
+  clearTraceImage();
   resizeCanvases();
   syncSlidersToGrid();
   updateLayerPanel();

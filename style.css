@@ -445,7 +445,7 @@ input, select, textarea {
 .cc-btn.active .cc-label { color: rgba(255,255,255,0.7); }
 
 /* 画像アップロード */
-#drop-zone {
+#drop-zone, #trace-drop-zone {
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius);
   padding: 12px 8px;
@@ -456,8 +456,8 @@ input, select, textarea {
   line-height: 1.6;
   transition: background 0.15s;
 }
-#drop-zone:hover { background: var(--bg); }
-#drop-zone svg { display: block; margin: 0 auto 4px; }
+#drop-zone:hover, #trace-drop-zone:hover { background: var(--bg); }
+#drop-zone svg, #trace-drop-zone svg { display: block; margin: 0 auto 4px; }
 
 /* 変換設定 */
 .method-row {
@@ -506,12 +506,16 @@ input, select, textarea {
   box-shadow: 0 2px 16px rgba(0,0,0,0.10);
 }
 
-#canvas-bg, #canvas-main, #canvas-overlay {
+#canvas-bg, #canvas-trace, #canvas-main, #canvas-overlay {
   position: absolute;
   top: 0; left: 0;
   display: block;
 }
 #canvas-bg { z-index: 0; pointer-events: none; }
+/* トレース画像はチェック柄(canvas-bg)の上・描画レイヤー(canvas-main)の下に表示する。
+   z-indexはcanvas-bgと同じ0でよい。DOM順でcanvas-bgより後にあるため
+   同点の場合はそちらが上に描画される。 */
+#canvas-trace { z-index: 0; pointer-events: none; }
 #canvas-main { z-index: 1; pointer-events: none; }
 #canvas-overlay { z-index: 2; cursor: crosshair; }
 #canvas-wrap canvas:last-child { position: relative; }
