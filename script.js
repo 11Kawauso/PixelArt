@@ -1491,6 +1491,10 @@ const confirmModal = document.getElementById('confirm-delete-all');
 let customColors = Array(CUSTOM_PALETTE_SIZE).fill(null);
 let deleteMode = false;
 let pendingSlotIndex = -1;
+// 色選択モーダル・全削除確認モーダルは「カスタムカラー」と
+// 「画像から変換に使う色」で共用するため、対象を覚えておく。
+let pendingSlotTarget = 'custom'; // 'custom' | 'convert'
+let deleteAllTarget = 'custom';
 
 function buildCustomPalette() {
   customPaletteGrid.innerHTML = '';
@@ -1519,6 +1523,7 @@ function buildCustomPalette() {
       }
       s.addEventListener('click', () => {
         pendingSlotIndex = i;
+        pendingSlotTarget = 'custom';
         document.getElementById('color-pick-modal').style.display = 'flex';
       });
       customPaletteGrid.appendChild(s);
@@ -1528,9 +1533,14 @@ function buildCustomPalette() {
 
 document.getElementById('btn-color-ok').addEventListener('click', () => {
   if (pendingSlotIndex >= 0) {
-    customColors[pendingSlotIndex] = customColorPicker.value;
-    setColor(customColorPicker.value);
-    buildCustomPalette();
+    if (pendingSlotTarget === 'convert') {
+      convertPaletteColors[pendingSlotIndex] = customColorPicker.value;
+      buildConvertPalette();
+    } else {
+      customColors[pendingSlotIndex] = customColorPicker.value;
+      setColor(customColorPicker.value);
+      buildCustomPalette();
+    }
     pendingSlotIndex = -1;
   }
   document.getElementById('color-pick-modal').style.display = 'none';
@@ -1548,18 +1558,132 @@ btnDeleteMode.addEventListener('click', () => {
 });
 
 btnDeleteAll.addEventListener('click', () => {
+  deleteAllTarget = 'custom';
+  confirmModal.querySelector('p').textContent = 'カスタムカラーをすべて削除しますか？';
   confirmModal.style.display = 'flex';
 });
 
 document.getElementById('btn-confirm-ok').addEventListener('click', () => {
-  customColors.fill(null);
-  buildCustomPalette();
+  if (deleteAllTarget === 'convert') {
+    convertPaletteColors.fill(null);
+    buildConvertPalette();
+  } else {
+    customColors.fill(null);
+    buildCustomPalette();
+  }
   confirmModal.style.display = 'none';
 });
 
 document.getElementById('btn-confirm-no').addEventListener('click', () => {
   confirmModal.style.display = 'none';
 });
+
+// ── 画像から変換に使う色（専用パレット） ──────────────
+// チェックを入れると、変換結果の各ピクセルをこのパレット内の
+// もっとも近い色（RGB空間のユークリッド距離）に置き換える。
+const CONVERT_PALETTE_SIZE = 24;
+const convertPaletteGrid = document.getElementById('convert-palette');
+const convertUsePaletteCheckbox = document.getElementById('convert-use-palette');
+const convertCountGroup = document.getElementById('convert-count-group');
+const convertPaletteGroup = document.getElementById('convert-palette-group');
+const convertPaletteHint = document.getElementById('convert-palette-hint');
+const btnCpDeleteMode = document.getElementById('btn-cp-delete-mode');
+const btnCpDeleteAll = document.getElementById('btn-cp-delete-all');
+let convertPaletteColors = Array(CONVERT_PALETTE_SIZE).fill(null);
+let convertDeleteMode = false;
+
+function buildConvertPalette() {
+  convertPaletteGrid.innerHTML = '';
+  convertPaletteColors.forEach((color, i) => {
+    const s = document.createElement('div');
+    if (color) {
+      s.className = 'swatch' + (convertDeleteMode ? ' delete-target' : '');
+      s.style.background = color;
+      s.title = color;
+      s.addEventListener('click', () => {
+        if (convertDeleteMode) {
+          convertPaletteColors[i] = null;
+          buildConvertPalette();
+        } else {
+          setColor(color); // 描画色としても使えるようにしておく
+        }
+      });
+    } else {
+      s.className = 'swatch-empty';
+      s.textContent = '＋';
+      if (convertDeleteMode) {
+        s.style.opacity = '0.3';
+        s.style.pointerEvents = 'none';
+      }
+      s.addEventListener('click', () => {
+        pendingSlotIndex = i;
+        pendingSlotTarget = 'convert';
+        document.getElementById('color-pick-modal').style.display = 'flex';
+      });
+    }
+    convertPaletteGrid.appendChild(s);
+  });
+  const count = convertPaletteColors.filter(Boolean).length;
+  convertPaletteHint.textContent = count
+    ? `${count}色で変換します`
+    : '＋から色を追加してください';
+  updateConvertButtonState();
+}
+
+// 画像が未選択、またはパレット指定なのに色が空のときは変換できない
+function updateConvertButtonState() {
+  const paletteReady = !convertUsePaletteCheckbox.checked
+    || convertPaletteColors.some(Boolean);
+  document.getElementById('btn-convert').disabled = !(uploadedImage && paletteReady);
+}
+
+convertUsePaletteCheckbox.addEventListener('change', () => {
+  const use = convertUsePaletteCheckbox.checked;
+  convertCountGroup.style.display = use ? 'none' : '';
+  convertPaletteGroup.style.display = use ? '' : 'none';
+  updateConvertButtonState();
+});
+
+btnCpDeleteMode.addEventListener('click', () => {
+  convertDeleteMode = !convertDeleteMode;
+  btnCpDeleteMode.classList.toggle('active', convertDeleteMode);
+  buildConvertPalette();
+});
+
+btnCpDeleteAll.addEventListener('click', () => {
+  deleteAllTarget = 'convert';
+  confirmModal.querySelector('p').textContent = '変換に使う色をすべて削除しますか？';
+  confirmModal.style.display = 'flex';
+});
+
+// 各セルの色を、指定パレット内でもっとも近い色に置き換える
+function applyFixedPalette(paletteHexes) {
+  const palette = paletteHexes.map(hex => [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+    hex,
+  ]);
+  const lookup = {};
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const hex = cells[r][c];
+      if (!hex) continue;
+      if (lookup[hex]) { cells[r][c] = lookup[hex]; continue; }
+      const cr = parseInt(hex.slice(1, 3), 16);
+      const cg = parseInt(hex.slice(3, 5), 16);
+      const cb = parseInt(hex.slice(5, 7), 16);
+      let bestDist = Infinity, bestHex = hex;
+      for (const p of palette) {
+        const dr = cr - p[0], dg = cg - p[1], db = cb - p[2];
+        const d = dr * dr + dg * dg + db * db;
+        if (d < bestDist) { bestDist = d; bestHex = p[3]; }
+      }
+      lookup[hex] = bestHex;
+      cells[r][c] = bestHex;
+    }
+  }
+}
 
 // ── 選択機能 ──────────────────────────────────────────
 const btnSelRange = document.getElementById('btn-sel-range');
@@ -2108,7 +2232,7 @@ function loadImageFile(file) {
     const img = new Image();
     img.onload = () => {
       uploadedImage = img;
-      document.getElementById('btn-convert').disabled = false;
+      updateConvertButtonState();
       // SVGアイコンは定数なのでinnerHTMLで挿入するが、file.nameは
       // ユーザー由来なのでテキストノードとして追加する（HTMLとして解釈させない）。
       // 直接innerHTMLに埋め込むと、細工したファイル名によるDOM XSSになる。
@@ -2344,7 +2468,15 @@ function convertImage(img) {
       }
     }
   }
-  quantizeColors(convertColorCount);
+  // 「指定した色だけで変換する」がオンなら減色ではなく指定パレットへ寄せる
+  const fixedPalette = convertUsePaletteCheckbox.checked
+    ? convertPaletteColors.filter(Boolean)
+    : null;
+  if (fixedPalette && fixedPalette.length) {
+    applyFixedPalette(fixedPalette);
+  } else {
+    quantizeColors(convertColorCount);
+  }
   drawCells();
   updateLayerThumbnails();
 }
@@ -2742,6 +2874,7 @@ function isEditorStarted() {
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();
 buildCustomPalette();
+buildConvertPalette();
 setColor('#3a3a38');
 initCells(cols, rows, false);
 resizeCanvases();

@@ -209,14 +209,34 @@
           <button class="method-btn active" data-method="mode">最頻色</button>
           <button class="method-btn" data-method="avg">平均色</button>
         </div>
-        <div class="panel-label" style="margin-bottom:4px;">色数</div>
-        <div class="color-count-grid">
-          <button class="cc-btn" data-colors="8"><span class="cc-num">8色</span><span class="cc-label">超レトロ</span></button>
-          <button class="cc-btn" data-colors="16"><span class="cc-num">16色</span><span class="cc-label">レトロ</span></button>
-          <button class="cc-btn active" data-colors="32"><span class="cc-num">32色</span><span class="cc-label">標準</span></button>
-          <button class="cc-btn" data-colors="64"><span class="cc-num">64色</span><span class="cc-label">高品質</span></button>
-          <button class="cc-btn" data-colors="128"><span class="cc-num">128色</span><span class="cc-label">超高品質</span></button>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-bottom:6px;">
+          <input type="checkbox" id="convert-use-palette" style="accent-color:var(--accent)">
+          指定した色だけで変換する
+        </label>
+
+        <!-- 色数（パレット未使用時） -->
+        <div id="convert-count-group">
+          <div class="panel-label" style="margin-bottom:4px;">色数</div>
+          <div class="color-count-grid">
+            <button class="cc-btn" data-colors="8"><span class="cc-num">8色</span><span class="cc-label">超レトロ</span></button>
+            <button class="cc-btn" data-colors="16"><span class="cc-num">16色</span><span class="cc-label">レトロ</span></button>
+            <button class="cc-btn active" data-colors="32"><span class="cc-num">32色</span><span class="cc-label">標準</span></button>
+            <button class="cc-btn" data-colors="64"><span class="cc-num">64色</span><span class="cc-label">高品質</span></button>
+            <button class="cc-btn" data-colors="128"><span class="cc-num">128色</span><span class="cc-label">超高品質</span></button>
+          </div>
         </div>
+
+        <!-- 変換用パレット（パレット使用時） -->
+        <div id="convert-palette-group" style="display:none;">
+          <div class="panel-label" style="margin-bottom:4px;">変換に使う色</div>
+          <div class="palette-grid" id="convert-palette"></div>
+          <div class="custom-palette-actions">
+            <button id="btn-cp-delete-mode">削除</button>
+            <button id="btn-cp-delete-all" class="danger">全削除</button>
+          </div>
+          <div class="layer-hint" id="convert-palette-hint">＋から色を追加してください</div>
+        </div>
+
         <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:8px;">
           <input type="checkbox" id="convert-resize-canvas" checked style="accent-color:var(--accent)">
           画像サイズに合わせてキャンバスサイズを変更
