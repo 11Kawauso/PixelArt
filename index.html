@@ -139,21 +139,23 @@
         <button class="preset-btn" data-size="64">64</button>
         <button class="preset-btn" data-size="128">128</button>
         <button class="preset-btn" data-size="256">256</button>
+        <button class="preset-btn" data-size="512">512</button>
+        <button class="preset-btn" data-size="1024">1024</button>
       </div>
       <div class="size-row">
         <label>全体</label>
-        <input type="range" id="both-slider" min="4" max="256" value="32" step="1">
-        <input type="number" class="size-input" id="both-val" min="4" max="256" value="32">
+        <input type="range" id="both-slider" min="4" max="1024" value="32" step="1">
+        <input type="number" class="size-input" id="both-val" min="4" max="1024" value="32">
       </div>
       <div class="size-row">
         <label>列</label>
-        <input type="range" id="cols-slider" min="4" max="256" value="32" step="1">
-        <input type="number" class="size-input" id="cols-val" min="4" max="256" value="32">
+        <input type="range" id="cols-slider" min="4" max="1024" value="32" step="1">
+        <input type="number" class="size-input" id="cols-val" min="4" max="1024" value="32">
       </div>
       <div class="size-row">
         <label>行</label>
-        <input type="range" id="rows-slider" min="4" max="256" value="32" step="1">
-        <input type="number" class="size-input" id="rows-val" min="4" max="256" value="32">
+        <input type="range" id="rows-slider" min="4" max="1024" value="32" step="1">
+        <input type="number" class="size-input" id="rows-val" min="4" max="1024" value="32">
       </div>
       <button id="btn-resize" style="width:100%; margin-top:4px;">適用</button>
     </div>
@@ -347,6 +349,7 @@
         <canvas id="canvas-bg"></canvas>
         <canvas id="canvas-trace"></canvas>
         <canvas id="canvas-main"></canvas>
+        <div id="canvas-grid"></div>
         <canvas id="canvas-overlay"></canvas>
       </div>
     </div>

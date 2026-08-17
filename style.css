@@ -532,6 +532,25 @@ input, select, textarea {
   top: 0; left: 0;
   display: block;
 }
+/* 拡大時に1マスがぼやけないよう、補間せずそのまま引き伸ばす。
+   1マスは単色なので、これがあれば1マス=1ピクセルでも劣化しない。
+   トレース画像は写真などの参考画像なので、こちらは従来どおり滑らかに表示する。 */
+#canvas-bg, #canvas-main, #canvas-overlay {
+  image-rendering: pixelated;
+}
+
+/* グリッド線。キャンバスに焼き込まず、表示サイズに追従する背景で描くことで
+   どの倍率でも1pxの細い線を保つ（--cell-size はJSが設定する）。 */
+#canvas-grid {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    repeating-linear-gradient(to right, rgba(0,0,0,0.15) 0 1px, transparent 1px var(--cell-size, 14px)),
+    repeating-linear-gradient(to bottom, rgba(0,0,0,0.15) 0 1px, transparent 1px var(--cell-size, 14px));
+}
 #canvas-bg { z-index: 0; pointer-events: none; }
 /* トレース画像の既定位置。チェック柄(canvas-bg)の上・描画レイヤー(canvas-main)の下。
    z-indexはcanvas-bgと同じ0でよい。DOM順でcanvas-bgより後にあるため

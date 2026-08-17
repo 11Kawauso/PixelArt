@@ -49,6 +49,7 @@ const cBg  = document.getElementById('canvas-bg');
 const cTrace = document.getElementById('canvas-trace');
 const cMain= document.getElementById('canvas-main');
 const cOv  = document.getElementById('canvas-overlay');
+const gridOverlay = document.getElementById('canvas-grid');
 const wrap = document.getElementById('canvas-wrap');
 const overlay = document.getElementById('start-overlay');
 const statPos   = document.getElementById('stat-pos');
@@ -56,13 +57,97 @@ const statColor = document.getElementById('stat-color');
 const statGrid  = document.getElementById('stat-grid');
 const zoomLabel = document.getElementById('zoom-label');
 
-// 1マスのピクセル数をグリッドサイズに応じて自動調整
+// 1マスあたりのキャンバス上のピクセル数。
+// 1マスは単色なので、拡大時の見た目の鮮明さは image-rendering: pixelated が
+// 担保する（1マス=1ピクセルでも劣化しない）。ここで大きな値を使う理由は
+// あくまで既定表示の大きさのためで、大きくするほどメモリを食うだけなので、
+// グリッドが大きいときは小さくしてキャンバスの実サイズを1024px以内に収める。
 function cellPx() {
   const n = Math.max(cols, rows);
   if (n <= 32)  return 14;
   if (n <= 64)  return 8;
   if (n <= 128) return 4;
-  return 2;
+  if (n <= 512) return 2;
+  return 1;
+}
+
+// '#rrggbb' → ImageDataに1回で書き込める32bit値（リトルエンディアンのABGR）に
+// 変換してキャッシュする。1024グリッドでは1回の再描画で100万マスを処理するため、
+// 毎回パースしたり1バイトずつ書いたりすると重くなる。
+const hexU32Cache = new Map();
+function hexToU32(hex) {
+  let v = hexU32Cache.get(hex);
+  if (v === undefined) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    v = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+    hexU32Cache.set(hex, v);
+  }
+  return v;
+}
+
+// セル配列を「1マス=1ピクセル」の画像として組み立てるための作業用キャンバス。
+// これを拡大コピーすることで、1マスずつ矩形を塗るより大幅に速く描画できる。
+let scratchCanvas = null;
+function getScratch() {
+  if (!scratchCanvas) scratchCanvas = document.createElement('canvas');
+  if (scratchCanvas.width !== cols || scratchCanvas.height !== rows) {
+    scratchCanvas.width = cols;
+    scratchCanvas.height = rows;
+  }
+  return scratchCanvas;
+}
+
+// レイヤーごとの描画結果（1マス=1ピクセルの画像）をキャッシュする。
+// 描いている最中に変化するのはアクティブレイヤーだけなので、
+// それ以外はキャッシュを使い回して再構築を省く。
+// レイヤーオブジェクトをキーにしているため、並び替え・複製・削除では
+// キャッシュがそのまま追従し、Undoや読み込みでレイヤーが作り直された
+// 場合は自動的にキャッシュ無しとして再構築される。
+const layerCanvasCache = new WeakMap();
+
+function getLayerCanvas(layer, forceRebuild) {
+  let entry = layerCanvasCache.get(layer);
+  if (!entry) {
+    entry = { canvas: document.createElement('canvas'), w: -1, h: -1 };
+    layerCanvasCache.set(layer, entry);
+    forceRebuild = true;
+  }
+  if (entry.w !== cols || entry.h !== rows) {
+    entry.canvas.width = cols;
+    entry.canvas.height = rows;
+    entry.w = cols; entry.h = rows;
+    forceRebuild = true;
+  }
+  if (forceRebuild) {
+    const lctx = entry.canvas.getContext('2d');
+    lctx.putImageData(layerImageData(lctx, layer.cells), 0, 0);
+  }
+  return entry.canvas;
+}
+
+// アクティブでないレイヤーの中身を直接書き換えたときに呼ぶ
+function invalidateLayerCache(layer) {
+  if (layer) layerCanvasCache.delete(layer);
+}
+function invalidateAllLayerCaches() {
+  layers.forEach(l => layerCanvasCache.delete(l));
+}
+
+// 1レイヤーぶんのセルを ImageData に詰める
+function layerImageData(ctx, layerCells) {
+  const img = ctx.createImageData(cols, rows);
+  const buf = new Uint32Array(img.data.buffer); // 1マス=1要素として書き込む
+  let i = 0;
+  for (let r = 0; r < rows; r++) {
+    const row = layerCells[r];
+    for (let c = 0; c < cols; c++, i++) {
+      const hex = row[c];
+      if (hex) buf[i] = hexToU32(hex); // 空セルは透明のまま
+    }
+  }
+  return img;
 }
 
 // ── 初期化 ────────────────────────────────────────────
@@ -87,6 +172,7 @@ function syncActiveCells() {
 }
 
 function initCells(c, r, keepOld) {
+  invalidateAllLayerCaches(); // 全レイヤーのセル配列を作り直すため
   cols = c; rows = r;
   if (keepOld && layers.length) {
     layers.forEach(l => {
@@ -165,65 +251,63 @@ function resizeCanvases() {
 function drawAll() {
   drawBg();
   drawCells();
-  drawGridLines();
+  updateGridOverlay();
 }
 
 function drawBg() {
   const px = cellPx();
   const ctx = cBg.getContext('2d');
   ctx.clearRect(0, 0, cBg.width, cBg.height);
+  // 市松模様も1マス=1ピクセルで作ってから拡大する
+  const scratch = getScratch();
+  const sctx = scratch.getContext('2d');
+  const img = sctx.createImageData(cols, rows);
+  const buf = new Uint32Array(img.data.buffer);
+  const light = 0xffeeeeee, dark = 0xffcccccc; // ABGR（グレーなので並び順は不問）
+  let i = 0;
   for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      ctx.fillStyle = (r + c) % 2 === 0 ? '#cccccc' : '#eeeeee';
-      ctx.fillRect(c * px, r * px, px, px);
+    for (let c = 0; c < cols; c++, i++) {
+      buf[i] = (r + c) % 2 === 0 ? dark : light;
     }
   }
+  sctx.putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(scratch, 0, 0, cols, rows, 0, 0, cols * px, rows * px);
 }
 
 function drawCells() {
   const px = cellPx();
   const ctx = cMain.getContext('2d');
   ctx.clearRect(0, 0, cMain.width, cMain.height);
+  ctx.imageSmoothingEnabled = false;
+  const activeLayer = layers[activeLayerIndex];
   for (const layer of layers) {
     if (!layer.visible || layer.opacity <= 0) continue;
+    // 各レイヤーを等倍で用意し、まとめて拡大コピーする。
+    // 1マスずつfillRectするより速く、レイヤー単位の不透明度も従来どおり効く。
+    // 描画対象のアクティブレイヤーだけは毎回作り直す。
+    const lc = getLayerCanvas(layer, layer === activeLayer);
     ctx.globalAlpha = layer.opacity;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (layer.cells[r][c]) {
-          ctx.fillStyle = layer.cells[r][c];
-          ctx.fillRect(c * px, r * px, px, px);
-        }
-      }
-    }
+    ctx.drawImage(lc, 0, 0, cols, rows, 0, 0, cols * px, rows * px);
   }
   ctx.globalAlpha = 1;
-  drawGridLines();
 }
 
-function drawGridLines() {
-  const px = cellPx();
-  const ctx = cMain.getContext('2d');
-  if (!showGrid) return;
-  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
-  ctx.lineWidth = 0.5;
-  for (let c = 0; c <= cols; c++) {
-    ctx.beginPath();
-    ctx.moveTo(c * px, 0);
-    ctx.lineTo(c * px, rows * px);
-    ctx.stroke();
-  }
-  for (let r = 0; r <= rows; r++) {
-    ctx.beginPath();
-    ctx.moveTo(0, r * px);
-    ctx.lineTo(cols * px, r * px);
-    ctx.stroke();
-  }
+// グリッド線はキャンバスに描き込まず、CSSの繰り返しグラデーションで表示する。
+// キャンバスに焼き込むと拡大時に線まで一緒に引き伸ばされて太くなるが、
+// この方式なら倍率に関わらず常に1pxの細い線を保てる。
+function updateGridOverlay() {
+  const displayed = cellPx() * zoom; // 画面上での1マスの大きさ
+  // マスが小さすぎると線だらけで潰れるので、その場合は出さない
+  const visible = showGrid && displayed >= 4;
+  gridOverlay.style.display = visible ? '' : 'none';
+  if (visible) gridOverlay.style.setProperty('--cell-size', displayed + 'px');
 }
 
 function drawGrid() {
   drawBg();
   drawCells();
-  drawGridLines();
+  updateGridOverlay();
 }
 
 function brushRect(col, row) {
@@ -1104,14 +1188,8 @@ function drawLayerThumb(canvas, layer) {
   canvas.height = rows;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, cols, rows);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (layer.cells[r][c]) {
-        ctx.fillStyle = layer.cells[r][c];
-        ctx.fillRect(c, r, 1, 1);
-      }
-    }
-  }
+  // サムネイルは元から1マス=1ピクセルなので、そのままImageDataを流し込む
+  ctx.putImageData(layerImageData(ctx, layer.cells), 0, 0);
 }
 
 function updateLayerThumbnails() {
@@ -1386,6 +1464,7 @@ btnLayerMerge.addEventListener('click', () => {
       }
     }
   }
+  invalidateLayerCache(below); // 下のレイヤーに焼き込んだのでキャッシュを捨てる
   layers.splice(activeLayerIndex, 1);
   activeLayerIndex -= 1;
   syncActiveCells();
@@ -1986,7 +2065,8 @@ const bothVal = document.getElementById('both-val');
 const colsVal = document.getElementById('cols-val');
 const rowsVal = document.getElementById('rows-val');
 
-function clampSize(v) { return Math.max(4, Math.min(256, Math.round(v) || 4)); }
+const MAX_GRID = 1024;
+function clampSize(v) { return Math.max(4, Math.min(MAX_GRID, Math.round(v) || 4)); }
 
 function setSizeAll(v) {
   bothSlider.value = v; bothVal.value = v;
@@ -2074,6 +2154,7 @@ function setZoom(z) {
     c.style.height = (h * zoom) + 'px';
   });
   zoomLabel.textContent = Math.round(zoom * 100) + '%';
+  updateGridOverlay(); // 1マスの表示サイズが変わるのでグリッド線も追従させる
   updateScrollPadding();
 }
 document.getElementById('btn-zoom-in').addEventListener('click',  () => setZoom(zoom * 1.5));
@@ -2353,8 +2434,8 @@ function applyTraceCanvasResize() {
     newRows = maxDim;
     newCols = Math.max(1, Math.round(maxDim * aspect));
   }
-  newCols = Math.min(256, newCols);
-  newRows = Math.min(256, newRows);
+  newCols = Math.min(MAX_GRID, newCols);
+  newRows = Math.min(MAX_GRID, newRows);
   pushHistory();
   initCells(newCols, newRows, true);
   resizeCanvases();
@@ -2432,8 +2513,8 @@ function convertImage(img) {
       newRows = maxDim;
       newCols = Math.max(1, Math.round(maxDim * aspect));
     }
-    newCols = Math.min(256, newCols);
-    newRows = Math.min(256, newRows);
+    newCols = Math.min(MAX_GRID, newCols);
+    newRows = Math.min(MAX_GRID, newRows);
     initCells(newCols, newRows, true); // 既存レイヤーは残したままサイズだけ変更
     resizeCanvases();
     syncSlidersToGrid();
@@ -2849,8 +2930,8 @@ function decodeLayerCells(sl, c, r) {
 
 // 保存データからエディタの状態を丸ごと復元する
 function loadProjectData(p) {
-  cols = Math.max(4, Math.min(256, p.cols));
-  rows = Math.max(4, Math.min(256, p.rows));
+  cols = Math.max(4, Math.min(MAX_GRID, p.cols));
+  rows = Math.max(4, Math.min(MAX_GRID, p.rows));
   layers = p.layers.map(sl => ({
     name: sl.name || 'レイヤー',
     visible: sl.visible !== false,
