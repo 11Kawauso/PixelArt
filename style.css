@@ -404,6 +404,13 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   justify-content: flex-start;
   padding-left: 16px;
 }
+/* 色選択モーダルだけは背景を暗くしない。
+   ブラウザ標準の色ピッカーのスポイトは画面に表示されている色をそのまま拾うため、
+   暗いオーバーレイが重なっているとパレットから吸った色まで暗くなってしまう。
+   代わりにカード側の影を濃くして、モーダルが開いていることを分かるようにする。 */
+#color-pick-modal { background: transparent; }
+#color-pick-modal .confirm-card { box-shadow: 0 8px 32px rgba(0,0,0,0.28); }
+
 .confirm-card p { font-size: 13px; margin-bottom: 14px; }
 .color-pick-input {
   width: 100%;
