@@ -1915,6 +1915,31 @@ document.querySelectorAll('.tool-btn').forEach(b => {
   b.addEventListener('click', () => setTool(b.dataset.tool));
 });
 
+// ── ショートカットキー ────────────────────────────────
+// キーの位置で判定する（e.code）ため、日本語入力がオンでも効く。
+const TOOL_SHORTCUTS = {
+  KeyQ: 'pen',
+  KeyW: 'fill',
+  KeyA: 'erase',
+  KeyS: 'pick',
+};
+
+// レイヤー名やファイル名の入力中はショートカットを無効にする
+function isTypingTarget(el) {
+  if (!el) return false;
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable;
+}
+
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return; // Ctrl+Z などと衝突させない
+  if (e.isComposing) return;                      // 日本語入力の変換中は無視
+  if (isTypingTarget(e.target)) return;
+  const tool = TOOL_SHORTCUTS[e.code];
+  if (!tool) return;
+  e.preventDefault();
+  setTool(tool);
+});
+
 // ── テンプレート図形メニュー ──────────────────────────
 const shapeMenu = document.getElementById('shape-menu');
 const shapeMenuBtn = document.getElementById('btn-shape-menu');
