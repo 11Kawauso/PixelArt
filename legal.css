@@ -1,0 +1,92 @@
+/* 利用規約・プライバシーポリシー用の共通スタイル */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --border: #e5e5e3;
+  --text: #1a1a18;
+  --text-muted: #888884;
+  --accent: #3a3a38;
+  --radius: 6px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.9;
+  background: var(--bg);
+  color: var(--text);
+  padding: 32px 16px 64px;
+}
+
+.legal {
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 32px 36px;
+}
+
+.legal-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 720px;
+  margin: 0 auto 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.legal-back:hover { color: var(--text); text-decoration: underline; }
+
+h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.legal-date {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 28px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+p { margin-bottom: 12px; }
+
+ul, ol { margin: 0 0 12px 1.5em; }
+li { margin-bottom: 4px; }
+
+a { color: #2563eb; }
+
+.legal-note {
+  background: var(--bg);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 12px 16px;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.legal-footer {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  body { padding: 16px 10px 40px; font-size: 13px; }
+  .legal { padding: 20px 18px; }
+  h1 { font-size: 18px; }
+}

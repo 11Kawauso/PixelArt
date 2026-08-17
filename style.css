@@ -1185,6 +1185,28 @@ input, select, textarea {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* 規約類はボタンではなくリンクなので、button の基本スタイルを当て直す */
+a.menu-item {
+  font-family: inherit;
+  font-size: 12px;
+  height: 28px;
+  padding: 5px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+a.menu-item:hover { background: var(--bg); }
+.menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
 /* 保存＞クラウド保存のような入れ子のサブメニュー。フライアウトではなく
    親項目の下にインデントして展開する（絶対配置にすると入れ子のたびに
    基準要素を用意する必要があり複雑になるため）。 */
