@@ -1062,6 +1062,7 @@ const btnUndockLayers = document.getElementById('btn-undock-layers');
 let layersDocked = false;
 
 function setLayersDocked(docked) {
+  const anchor = canvasScreenPos(); // ドックの出し入れでキャンバスをずらさない
   layersDocked = docked;
   if (docked) {
     layerDock.appendChild(tabLayersPage);
@@ -1078,6 +1079,8 @@ function setLayersDocked(docked) {
   switchPanelTab('draw');
   updateLayerPanel();
   syncTogglePosition();
+  updateScrollPadding();
+  restoreCanvasScreenPos(anchor);
 }
 
 btnDockLayers.addEventListener('click', () => setLayersDocked(true));
@@ -2503,7 +2506,41 @@ function syncTogglePosition() {
   }
 }
 
+// パネルの開閉や幅変更でキャンバスエリアの左端が動くと、スクロール位置は
+// そのままなのでキャンバスが画面上で左右にずれて見える。変更前のキャンバスの
+// 画面座標を覚えておき、スクロール位置を補正して同じ場所に留める。
+function canvasScreenPos() {
+  const r = wrap.getBoundingClientRect();
+  return { x: r.left, y: r.top };
+}
+
+function restoreCanvasScreenPos(target) {
+  const now = canvasScreenPos();
+  canvasArea.scrollLeft += now.x - target.x;
+  canvasArea.scrollTop  += now.y - target.y;
+}
+
+// パネル幅はCSSトランジション（0.22秒）で徐々に変わるため、
+// アニメーションが終わるまで毎フレーム補正し続ける。
+function keepCanvasAnchored(duration = 300) {
+  const target = canvasScreenPos();
+  const settle = () => {
+    updateScrollPadding(); // エリア幅が変わったので余白を取り直す
+    restoreCanvasScreenPos(target);
+  };
+  const start = performance.now();
+  const step = () => {
+    restoreCanvasScreenPos(target);
+    if (performance.now() - start < duration) requestAnimationFrame(step);
+    else settle();
+  };
+  requestAnimationFrame(step);
+  // 非表示タブなどでrequestAnimationFrameが動かない場合の保険
+  setTimeout(settle, duration);
+}
+
 function togglePanel() {
+  const anchor = canvasScreenPos();
   if (panelCollapsed) {
     panel.classList.remove('collapsed');
     if (!isMobile()) panel.style.width = savedPanelWidth + 'px';
@@ -2514,6 +2551,8 @@ function togglePanel() {
     panelCollapsed = true;
   }
   syncTogglePosition();
+  restoreCanvasScreenPos(anchor); // 1フレーム目のずれを先に打ち消す
+  keepCanvasAnchored();
 }
 
 panelToggle.addEventListener('click', togglePanel);
@@ -2536,10 +2575,12 @@ window.addEventListener('resize', () => {
 
 // ドラッグリサイズ（デスクトップのみ）
 let isResizing = false;
+let resizeAnchor = null; // ドラッグ中にキャンバスを固定しておく画面座標
 panelResize.addEventListener('mousedown', e => {
   if (isMobile()) return;
   e.preventDefault();
   isResizing = true;
+  resizeAnchor = canvasScreenPos();
   panel.classList.add('no-transition');
   panelResize.classList.add('dragging');
   document.body.style.cursor = 'col-resize';
@@ -2553,6 +2594,7 @@ document.addEventListener('mousemove', e => {
   newWidth = Math.max(MIN_PANEL_W, Math.min(newWidth, window.innerWidth * 0.5));
   panel.style.width = newWidth + 'px';
   syncTogglePosition();
+  restoreCanvasScreenPos(resizeAnchor); // 幅を変えてもキャンバスは動かさない
 });
 
 document.addEventListener('mouseup', () => {
@@ -2563,6 +2605,9 @@ document.addEventListener('mouseup', () => {
   document.body.style.cursor = '';
   document.body.style.userSelect = '';
   savedPanelWidth = panel.offsetWidth;
+  updateScrollPadding();
+  restoreCanvasScreenPos(resizeAnchor);
+  resizeAnchor = null;
 });
 
 // ── キャンバス表示切替 ────────────────────────────────
