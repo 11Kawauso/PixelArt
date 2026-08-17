@@ -2218,6 +2218,17 @@ traceOpacitySlider.addEventListener('input', () => {
   drawTraceImage();
 });
 
+// 重ね順の切替。実際の前後関係はCSSのz-index（.above-layers）で決まる。
+document.querySelectorAll('.trace-pos-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    const above = b.dataset.tracePos === 'above';
+    cTrace.classList.toggle('above-layers', above);
+    document.querySelectorAll('.trace-pos-btn').forEach(x => {
+      x.classList.toggle('active', x === b);
+    });
+  });
+});
+
 btnTraceRemove.addEventListener('click', clearTraceImage);
 
 function convertImage(img) {
