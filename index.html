@@ -66,6 +66,7 @@
     <div class="panel-tabs">
       <button class="panel-tab-btn active" id="tab-draw">✏️ 描画</button>
       <button class="panel-tab-btn" id="tab-layers">🗂 レイヤー</button>
+      <button class="panel-tab-arrow" id="btn-dock-layers" title="レイヤーパネルを右に並べて表示">▶</button>
     </div>
 
     <!-- 描画タブ -->
@@ -299,6 +300,15 @@
 
   <!-- リサイズハンドル -->
   <div class="panel-resize" id="panel-resize"></div>
+
+  <!-- レイヤーパネルのドック（右に並べて表示するときの入れ物） -->
+  <div class="layer-dock" id="layer-dock" style="display:none">
+    <div class="layer-dock-header">
+      <span>🗂 レイヤー</span>
+      <button id="btn-undock-layers" title="タブ表示に戻す">◀</button>
+    </div>
+    <!-- ここに #panel-tab-layers を移動して表示する -->
+  </div>
 
   <!-- モバイル用背景オーバーレイ -->
   <div class="panel-backdrop" id="panel-backdrop"></div>

@@ -1040,16 +1040,48 @@ const tabDrawPage = document.getElementById('panel-tab-draw');
 const tabLayersPage = document.getElementById('panel-tab-layers');
 
 function switchPanelTab(tab) {
-  const showLayers = tab === 'layers';
+  // ドック中はレイヤーページが左パネルの外（ドック）にあるため、
+  // タブ切替の対象からは外して常に描画タブを表示する。
+  const showLayers = tab === 'layers' && !layersDocked;
   tabDrawBtn.classList.toggle('active', !showLayers);
   tabLayersBtn.classList.toggle('active', showLayers);
   tabDrawPage.style.display = showLayers ? 'none' : '';
-  tabLayersPage.style.display = showLayers ? '' : 'none';
+  if (!layersDocked) tabLayersPage.style.display = showLayers ? '' : 'none';
   if (showLayers) updateLayerThumbnails();
 }
 
 tabDrawBtn.addEventListener('click', () => switchPanelTab('draw'));
 tabLayersBtn.addEventListener('click', () => switchPanelTab('layers'));
+
+// ── レイヤードック（左パネルの右に並べて表示） ─────────
+// レイヤーページのDOMノード自体をドックへ移動する。ノードを移動しても
+// 登録済みのイベントリスナーは保持されるため、レイヤー操作はそのまま動く。
+const layerDock = document.getElementById('layer-dock');
+const btnDockLayers = document.getElementById('btn-dock-layers');
+const btnUndockLayers = document.getElementById('btn-undock-layers');
+let layersDocked = false;
+
+function setLayersDocked(docked) {
+  layersDocked = docked;
+  if (docked) {
+    layerDock.appendChild(tabLayersPage);
+    tabLayersPage.style.display = '';
+    layerDock.style.display = '';
+    tabLayersBtn.style.display = 'none';
+    btnDockLayers.style.display = 'none';
+  } else {
+    panel.appendChild(tabLayersPage); // 元の位置（描画ページの後ろ）に戻す
+    layerDock.style.display = 'none';
+    tabLayersBtn.style.display = '';
+    btnDockLayers.style.display = '';
+  }
+  switchPanelTab('draw');
+  updateLayerPanel();
+  syncTogglePosition();
+}
+
+btnDockLayers.addEventListener('click', () => setLayersDocked(true));
+btnUndockLayers.addEventListener('click', () => setLayersDocked(false));
 
 // ── レイヤーパネル ────────────────────────────────────
 const layerListEl = document.getElementById('layer-list');
@@ -2462,9 +2494,12 @@ function syncTogglePosition() {
     // パネルはトランジション中のため、実測値ではなく指定済みの目標幅を使う
     const w = panelCollapsed ? 0 : (parseFloat(panel.style.width) || panel.getBoundingClientRect().width);
     const handleW = panelCollapsed ? 0 : 4;
-    panelToggle.style.left = (w + handleW) + 'px';
+    // レイヤードックを開いている場合はその幅も左端に加算する
+    const dockW = layersDocked ? layerDock.getBoundingClientRect().width : 0;
+    const edge = w + handleW + dockW;
+    panelToggle.style.left = edge + 'px';
     panelBackdrop.classList.remove('visible');
-    updateColorHistoryPos(w + handleW);
+    updateColorHistoryPos(edge);
   }
 }
 
@@ -2494,6 +2529,8 @@ if (isMobile()) {
 
 // 画面リサイズ時にモード切替
 window.addEventListener('resize', () => {
+  // 並べて表示する幅がなくなったらタブ表示に戻す（CSSの900px境界と揃える）
+  if (layersDocked && window.innerWidth <= 900) setLayersDocked(false);
   syncTogglePosition();
 });
 

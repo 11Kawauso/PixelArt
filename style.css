@@ -859,9 +859,59 @@ input, select, textarea {
   border-color: var(--accent);
 }
 
+/* タブ右端の「右に並べて表示」ボタン */
+.panel-tab-arrow {
+  width: 28px;
+  flex-shrink: 0;
+  padding: 0;
+  height: 32px;
+  border-radius: var(--radius);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
 /* レイヤータブではリストを広く使えるようにする */
 #panel-tab-layers .layer-list {
   max-height: none;
+}
+
+/* ── レイヤードック（左パネルの右に並べて表示） ── */
+.layer-dock {
+  width: 230px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.layer-dock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.layer-dock-header button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+/* ドック内のレイヤーページは高さいっぱいに広げる（操作ボタンは下部固定のまま） */
+.layer-dock #panel-tab-layers {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 画面が狭いときは並べて表示できるだけの幅がないため、ドック機能自体を隠す */
+@media (max-width: 900px) {
+  .panel-tab-arrow { display: none; }
 }
 
 /* ── レイヤー拡張（不透明度・ロック・名前変更） ── */
