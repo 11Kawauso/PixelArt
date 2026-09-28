@@ -3440,9 +3440,11 @@ document.addEventListener('visibilitychange', () => {
 
 // ── 参考画像ウィンドウ ────────────────────────────────
 // キャンバスとは別に、画面上に参考画像を小さく浮かべて表示する。
-// トレースと違って絵を描いても隠れない。ドラッグで移動、右下の角で拡大縮小でき、
-// 縦横比は画像に合わせて固定する。位置と大きさはこのブラウザに記憶する
-// （画像そのものは容量が大きくなりうるため記憶しない）。
+// トレースと違って絵を描いても隠れない。
+// ・ウィンドウ：ドラッグで移動、右下の角で幅と高さを別々に変更できる。
+//   位置と大きさはこのブラウザに記憶する（画像そのものは容量が大きくなりうるため記憶しない）。
+// ・画像：ピンチ（トラックパッド・2本指）やホイールで拡大縮小し、拡大中はドラッグで見る場所を動かせる。
+//   ダブルクリックか、ヘッダーの倍率表示を押すと全体表示に戻る。
 const refWindow = document.getElementById('ref-window');
 const refBody = document.getElementById('ref-body');
 const refImg = document.getElementById('ref-img');
@@ -3450,22 +3452,31 @@ const refEmpty = document.getElementById('ref-empty');
 const refResize = document.getElementById('ref-resize');
 const refFileInput = document.getElementById('ref-file-input');
 const btnRefToggle = document.getElementById('btn-ref-toggle');
+const btnRefFit = document.getElementById('btn-ref-fit');
 const REF_GEOMETRY_KEY = 'pixelart-ref-window';
 const REF_HEADER_H = 28;
 const REF_MIN_W = 120;
-const REF_EMPTY_ASPECT = 4 / 3; // 画像を選ぶ前の枠の縦横比
+const REF_MIN_BODY_H = 60;
+const REF_DEFAULT_ASPECT = 4 / 3; // 画像を選ぶ前の枠の縦横比
+const REF_MAX_ZOOM = 32;          // 全体表示に対する最大倍率
 
-// x, y: ウィンドウ左上の画面座標、w: 幅（高さは縦横比から決まる）
+// x, y: ウィンドウ左上の画面座標、w, h: ウィンドウ全体の幅と高さ（ヘッダー込み）
 let refGeom = null;
-let refAspect = REF_EMPTY_ASPECT;
+// 画像の表示状態。scale: 画像1pxあたりの画面上の大きさ、
+// ox, oy: 表示領域の左上から見た画像の左上の位置、fitted: 全体表示中か
+let refView = { scale: 1, ox: 0, oy: 0, fitted: true };
 
 function loadRefGeometry() {
   try {
     const g = JSON.parse(localStorage.getItem(REF_GEOMETRY_KEY));
-    if (g && [g.x, g.y, g.w].every(Number.isFinite)) return g;
+    if (g && [g.x, g.y, g.w].every(Number.isFinite)) {
+      // 高さを記憶していない古い形式なら、幅から決める
+      if (!Number.isFinite(g.h)) g.h = Math.round(g.w / REF_DEFAULT_ASPECT) + REF_HEADER_H;
+      return g;
+    }
   } catch (err) { /* 読めなければ既定の位置にする */ }
   const w = Math.min(240, Math.round(window.innerWidth * 0.6));
-  return { x: window.innerWidth - w - 28, y: 100, w };
+  return { x: window.innerWidth - w - 28, y: 100, w, h: Math.round(w / REF_DEFAULT_ASPECT) + REF_HEADER_H };
 }
 
 function saveRefGeometry() {
@@ -3474,20 +3485,84 @@ function saveRefGeometry() {
 
 // 画面からはみ出さないように大きさと位置を収めて反映する
 function layoutRefWindow() {
-  const maxW = Math.max(REF_MIN_W, Math.min(
-    window.innerWidth - 16,
-    (window.innerHeight - 16 - REF_HEADER_H) * refAspect,
-  ));
-  refGeom.w = Math.round(Math.max(REF_MIN_W, Math.min(maxW, refGeom.w)));
-  const h = Math.round(refGeom.w / refAspect) + REF_HEADER_H;
+  refGeom.w = Math.round(Math.max(REF_MIN_W, Math.min(window.innerWidth - 16, refGeom.w)));
+  refGeom.h = Math.round(Math.max(REF_HEADER_H + REF_MIN_BODY_H, Math.min(window.innerHeight - 16, refGeom.h)));
   refGeom.x = Math.round(Math.max(0, Math.min(window.innerWidth - refGeom.w, refGeom.x)));
-  refGeom.y = Math.round(Math.max(0, Math.min(window.innerHeight - h, refGeom.y)));
+  refGeom.y = Math.round(Math.max(0, Math.min(window.innerHeight - refGeom.h, refGeom.y)));
   refWindow.style.left = refGeom.x + 'px';
   refWindow.style.top = refGeom.y + 'px';
   refWindow.style.width = refGeom.w + 'px';
-  refWindow.style.height = h + 'px';
-  // 小さなドット絵を拡大表示するときはぼかさずにくっきり見せる
-  refImg.style.imageRendering = refImg.naturalWidth && refGeom.w > refImg.naturalWidth ? 'pixelated' : 'auto';
+  refWindow.style.height = refGeom.h + 'px';
+  // 全体表示中はウィンドウに合わせて画像も伸び縮みさせ、拡大中は倍率を保つ
+  if (refView.fitted || refView.scale < refFitScale()) fitRefView();
+  else clampRefView();
+  applyRefView();
+}
+
+// ── 画像の拡大縮小・移動 ──
+function refFitScale() {
+  if (!refSampleCtx) return 1;
+  const { width: nw, height: nh } = refSampleCtx.canvas;
+  return Math.min(refBody.clientWidth / nw, refBody.clientHeight / nh);
+}
+
+function fitRefView() {
+  if (!refSampleCtx) return;
+  const { width: nw, height: nh } = refSampleCtx.canvas;
+  const s = refFitScale();
+  refView = {
+    scale: s,
+    ox: (refBody.clientWidth - nw * s) / 2,
+    oy: (refBody.clientHeight - nh * s) / 2,
+    fitted: true,
+  };
+}
+
+// 画像を表示領域から外へ逃がさない。表示領域より大きい向きはすき間ができない範囲、
+// 小さい向きは領域内に収まる範囲に制限する（中央に固定すると、拡大の途中で
+// カーソルの下の点がずれてしまうため、範囲内なら位置はそのまま保つ）。
+function clampRefView() {
+  if (!refSampleCtx) return;
+  const clampAxis = (o, box, size) => {
+    const a = box - size; // 大きい向きなら負、小さい向きなら正
+    return Math.max(Math.min(0, a), Math.min(Math.max(0, a), o));
+  };
+  refView.ox = clampAxis(refView.ox, refBody.clientWidth, refSampleCtx.canvas.width * refView.scale);
+  refView.oy = clampAxis(refView.oy, refBody.clientHeight, refSampleCtx.canvas.height * refView.scale);
+}
+
+function applyRefView() {
+  if (!refSampleCtx) return;
+  const { width: nw, height: nh } = refSampleCtx.canvas;
+  refImg.style.width = nw * refView.scale + 'px';
+  refImg.style.height = nh * refView.scale + 'px';
+  refImg.style.transform = `translate(${refView.ox}px, ${refView.oy}px)`;
+  // 拡大表示のときはぼかさずにドットをくっきり見せる
+  refImg.style.imageRendering = refView.scale > 1 ? 'pixelated' : 'auto';
+  refBody.classList.toggle('zoomed', !refView.fitted);
+  btnRefFit.style.display = refView.fitted ? 'none' : '';
+  btnRefFit.textContent = Math.round(refView.scale / refFitScale() * 100) + '%';
+}
+
+// 倍率を変える。(cx, cy)は表示領域内の基準点で、その下にある画像上の点が動かないようにする。
+// 基準点を別の位置(tx, ty)へ移したいとき（2本指で拡大しながら動かす）はそれも指定する。
+function setRefScale(newScale, cx, cy, base = refView, tx = cx, ty = cy) {
+  const fit = refFitScale();
+  const s = Math.max(fit, Math.min(fit * REF_MAX_ZOOM, newScale));
+  refView = {
+    scale: s,
+    ox: tx - (cx - base.ox) * (s / base.scale),
+    oy: ty - (cy - base.oy) * (s / base.scale),
+    fitted: s <= fit * 1.001,
+  };
+  if (refView.fitted) fitRefView();
+  else clampRefView();
+  applyRefView();
+}
+
+function refBodyPoint(clientX, clientY) {
+  const r = refBody.getBoundingClientRect();
+  return { x: clientX - r.left, y: clientY - r.top };
 }
 
 function setRefWindowOpen(open) {
@@ -3512,12 +3587,16 @@ function loadRefImageFile(file) {
       refImg.style.display = '';
       refEmpty.style.display = 'none';
       refBody.classList.add('has-image');
-      refAspect = img.naturalWidth / img.naturalHeight;
       prepareRefSampling(img);
+      // 新しい画像を開いたら、今の幅のまま画像の縦横比に合う高さにして全体表示する
+      if (!refGeom) refGeom = loadRefGeometry();
+      refGeom.h = Math.round(refGeom.w * img.naturalHeight / img.naturalWidth) + REF_HEADER_H;
+      refView.fitted = true;
       // タイトルにファイル名を出す（textContentなのでHTMLとして解釈されない）
       refWindow.querySelector('.ref-title').textContent = file.name;
       refWindow.title = file.name;
       setRefWindowOpen(true);
+      saveRefGeometry();
     };
     img.src = e.target.result;
   };
@@ -3541,13 +3620,9 @@ function prepareRefSampling(img) {
 function refColorAt(clientX, clientY) {
   if (!refSampleCtx) return null;
   const { width: nw, height: nh } = refSampleCtx.canvas;
-  const rect = refBody.getBoundingClientRect();
-  // object-fit: contain で表示しているため、余白を除いた実際の表示範囲で換算する
-  const scale = Math.min(rect.width / nw, rect.height / nh);
-  const ox = (rect.width - nw * scale) / 2;
-  const oy = (rect.height - nh * scale) / 2;
-  const x = Math.floor((clientX - rect.left - ox) / scale);
-  const y = Math.floor((clientY - rect.top - oy) / scale);
+  const p = refBodyPoint(clientX, clientY);
+  const x = Math.floor((p.x - refView.ox) / refView.scale);
+  const y = Math.floor((p.y - refView.oy) / refView.scale);
   if (x < 0 || y < 0 || x >= nw || y >= nh) return null;
   const [r, g, b, a] = refSampleCtx.getImageData(x, y, 1, 1).data;
   if (a < 128) return null; // キャンバスのスポイトと同じく、透明な所では色を変えない
@@ -3577,6 +3652,13 @@ refFileInput.addEventListener('change', e => {
   refFileInput.value = ''; // 同じ画像をもう一度選んでも読み込めるようにする
 });
 
+function resetRefView() {
+  fitRefView();
+  applyRefView();
+}
+btnRefFit.addEventListener('click', resetRefView);
+refBody.addEventListener('dblclick', () => { if (refSampleCtx) resetRefView(); });
+
 refBody.addEventListener('dragover', e => { e.preventDefault(); refBody.classList.add('drag-over'); });
 refBody.addEventListener('dragleave', () => refBody.classList.remove('drag-over'));
 refBody.addEventListener('drop', e => {
@@ -3585,52 +3667,123 @@ refBody.addEventListener('drop', e => {
   loadRefImageFile(e.dataTransfer.files[0]);
 });
 
-// ウィンドウのどこをつかんでも移動できる（ボタンと右下のつまみを除く）。
+// ホイール・トラックパッドのピンチで拡大縮小（カーソル位置を中心にする）。
+// トラックパッドのピンチはCtrl付きの細かいホイールとして届くので感度を上げる。
+refWindow.addEventListener('wheel', e => {
+  e.preventDefault(); // ブラウザ自体の拡大（Ctrl+ホイール）を防ぐ
+  if (!refSampleCtx) return;
+  const unit = e.deltaMode === 1 ? 20 : 1;
+  const factor = Math.exp(-e.deltaY * unit * (e.ctrlKey ? 0.01 : 0.002));
+  const p = refBodyPoint(e.clientX, e.clientY);
+  setRefScale(refView.scale * factor, p.x, p.y);
+}, { passive: false });
+
+// ── ウィンドウ上のドラッグ操作 ──
+// 1本指（マウス）：拡大中の画像の上なら見る場所の移動、それ以外はウィンドウの移動。
+// 2本指：画像の拡大縮小（ピンチ）と移動。
 // 画像が未選択のときは、動かさずに離したら画像選択を開く。
+const refPointers = new Map(); // pointerId → {x, y}
+let refGesture = null;
+
+function beginRefSingle(clientX, clientY, target) {
+  const pan = refBody.contains(target) && refSampleCtx && !refView.fitted;
+  refGesture = {
+    mode: pan ? 'pan' : 'move',
+    px: clientX, py: clientY,
+    x: refGeom.x, y: refGeom.y, ox: refView.ox, oy: refView.oy,
+    moved: false, target,
+  };
+}
+
+function beginRefPinch() {
+  const [a, b] = [...refPointers.values()];
+  const c = refBodyPoint((a.x + b.x) / 2, (a.y + b.y) / 2);
+  refGesture = {
+    mode: 'pinch',
+    dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+    cx: c.x, cy: c.y,
+    base: { ...refView },
+    moved: true,
+  };
+}
+
 refWindow.addEventListener('pointerdown', e => {
   if (e.button !== 0 || e.target.closest('button') || e.target === refResize) return;
   e.preventDefault();
-  if (isRefPicking(e)) {
+  if (isRefPicking(e) && !refPointers.size) {
     // スポイト中は画像部分では移動せず色を取る（ヘッダーをつかめば移動できる）
     const color = refColorAt(e.clientX, e.clientY);
     if (color) setColor(color);
     return;
   }
-  const start = { px: e.clientX, py: e.clientY, x: refGeom.x, y: refGeom.y };
-  let moved = false;
-  refWindow.setPointerCapture(e.pointerId);
-  const onMove = ev => {
-    const dx = ev.clientX - start.px, dy = ev.clientY - start.py;
-    if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return; // 小さな手ぶれはクリック扱い
-    moved = true;
-    refGeom.x = start.x + dx;
-    refGeom.y = start.y + dy;
-    layoutRefWindow();
-  };
-  const onUp = () => {
-    refWindow.removeEventListener('pointermove', onMove);
-    refWindow.removeEventListener('pointerup', onUp);
-    refWindow.removeEventListener('pointercancel', onUp);
-    if (moved) saveRefGeometry();
-    else if (refEmpty.style.display !== 'none' && refBody.contains(e.target)) refFileInput.click();
-  };
-  refWindow.addEventListener('pointermove', onMove);
-  refWindow.addEventListener('pointerup', onUp);
-  refWindow.addEventListener('pointercancel', onUp);
+  try { refWindow.setPointerCapture(e.pointerId); } catch (err) { /* 捕捉できなくても操作は続けられる */ }
+  refPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (refPointers.size === 1) beginRefSingle(e.clientX, e.clientY, e.target);
+  else if (refPointers.size === 2 && refSampleCtx) beginRefPinch();
 });
 
-// 右下のつまみで拡大縮小（左上の位置は固定し、縦横比を保つ）
+refWindow.addEventListener('pointermove', e => {
+  if (!refPointers.has(e.pointerId)) return;
+  refPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const g = refGesture;
+  if (!g) return;
+  if (g.mode === 'pinch') {
+    if (refPointers.size < 2) return;
+    const [a, b] = [...refPointers.values()];
+    const c = refBodyPoint((a.x + b.x) / 2, (a.y + b.y) / 2);
+    const dist = Math.hypot(a.x - b.x, a.y - b.y);
+    // 開始時に指の中心にあった画像上の点を、今の指の中心へ合わせる
+    setRefScale(g.base.scale * dist / g.dist, g.cx, g.cy, g.base, c.x, c.y);
+    return;
+  }
+  const dx = e.clientX - g.px, dy = e.clientY - g.py;
+  if (!g.moved && Math.abs(dx) + Math.abs(dy) < 4) return; // 小さな手ぶれはクリック扱い
+  g.moved = true;
+  if (g.mode === 'pan') {
+    refView.ox = g.ox + dx;
+    refView.oy = g.oy + dy;
+    clampRefView();
+    applyRefView();
+  } else if (g.mode === 'move') {
+    refGeom.x = g.x + dx;
+    refGeom.y = g.y + dy;
+    layoutRefWindow();
+  }
+});
+
+function endRefPointer(e) {
+  if (!refPointers.has(e.pointerId)) return;
+  refPointers.delete(e.pointerId);
+  const g = refGesture;
+  if (refPointers.size === 1 && g && g.mode === 'pinch') {
+    // ピンチの途中で1本離したら、残った指では拡大中の画像の移動だけを続ける
+    // （いきなりウィンドウが動き出さないようにする）
+    const [p] = [...refPointers.values()];
+    beginRefSingle(p.x, p.y, refBody);
+    if (refGesture.mode !== 'pan') refGesture.mode = 'none';
+    refGesture.moved = true;
+    return;
+  }
+  if (refPointers.size) return;
+  refGesture = null;
+  if (!g) return;
+  if (g.mode === 'move' && g.moved) saveRefGeometry();
+  else if (!g.moved && refEmpty.style.display !== 'none' && refBody.contains(g.target)) refFileInput.click();
+}
+refWindow.addEventListener('pointerup', endRefPointer);
+refWindow.addEventListener('pointercancel', endRefPointer);
+
+// 右下のつまみで大きさを変える（左上の位置は固定し、幅と高さは別々に動かせる）
 refResize.addEventListener('pointerdown', e => {
   if (e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
-  const start = { px: e.clientX, py: e.clientY, w: refGeom.w };
+  const start = { px: e.clientX, py: e.clientY, w: refGeom.w, h: refGeom.h };
   refResize.setPointerCapture(e.pointerId);
   const onMove = ev => {
-    const dx = ev.clientX - start.px;
-    const dy = (ev.clientY - start.py) * refAspect; // 縦の移動量を幅に換算
-    // 横と縦のうち大きく動かした方に合わせる
-    refGeom.w = start.w + (Math.abs(dx) >= Math.abs(dy) ? dx : dy);
+    // 画面の右端・下端を越えて広げた分は、ウィンドウを動かさずに切り捨てる
+    refGeom.w = Math.min(start.w + ev.clientX - start.px, window.innerWidth - refGeom.x);
+    refGeom.h = Math.min(start.h + ev.clientY - start.py, window.innerHeight - refGeom.y);
     layoutRefWindow();
   };
   const onUp = () => {

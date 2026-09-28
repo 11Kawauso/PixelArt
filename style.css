@@ -738,19 +738,30 @@ input, select, textarea {
   cursor: pointer;
 }
 .ref-header-btn:hover { background: var(--border); }
+/* 拡大中に出る倍率表示（押すと全体表示に戻る） */
+.ref-zoom-btn {
+  width: auto;
+  padding: 0 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
 .ref-body {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   background: #f0f0ee;
 }
+/* 大きさと位置はscript.jsが倍率に合わせて指定する */
 .ref-body img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
   pointer-events: none;
 }
+.ref-body.zoomed { cursor: grab; }
+.ref-body.zoomed:active { cursor: grabbing; }
 .ref-body.picking.has-image { cursor: crosshair; }
 .ref-body.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .ref-empty {
