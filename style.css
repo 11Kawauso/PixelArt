@@ -751,6 +751,7 @@ input, select, textarea {
   object-fit: contain;
   pointer-events: none;
 }
+.ref-body.picking.has-image { cursor: crosshair; }
 .ref-body.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
 .ref-empty {
   position: absolute;

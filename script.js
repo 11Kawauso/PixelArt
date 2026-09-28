@@ -2332,6 +2332,8 @@ function setTool(t) {
 
 function updateCanvasCursor() {
   cOv.style.cursor = currentTool === 'move' ? 'move' : '';
+  // スポイト中は参考画像の上でも色を取れることが分かるようにする
+  document.getElementById('ref-body').classList.toggle('picking', currentTool === 'pick');
 }
 document.querySelectorAll('.tool-btn').forEach(b => {
   b.addEventListener('click', () => setTool(b.dataset.tool));
@@ -3509,7 +3511,9 @@ function loadRefImageFile(file) {
       refImg.src = img.src;
       refImg.style.display = '';
       refEmpty.style.display = 'none';
+      refBody.classList.add('has-image');
       refAspect = img.naturalWidth / img.naturalHeight;
+      prepareRefSampling(img);
       // タイトルにファイル名を出す（textContentなのでHTMLとして解釈されない）
       refWindow.querySelector('.ref-title').textContent = file.name;
       refWindow.title = file.name;
@@ -3519,6 +3523,49 @@ function loadRefImageFile(file) {
   };
   reader.readAsDataURL(file);
 }
+
+// ── 参考画像からのスポイト ──
+// スポイトツールを選んでいるときに参考画像をクリックすると、その位置の色を取る。
+// 色を読むために、画像を原寸で作業用キャンバスに描いておく。
+let refSampleCtx = null;
+
+function prepareRefSampling(img) {
+  const cv = document.createElement('canvas');
+  cv.width = img.naturalWidth;
+  cv.height = img.naturalHeight;
+  refSampleCtx = cv.getContext('2d', { willReadFrequently: true });
+  refSampleCtx.drawImage(img, 0, 0);
+}
+
+// 画面座標 → 画像上の色（'#rrggbb'）。画像の外や透明な部分ならnull。
+function refColorAt(clientX, clientY) {
+  if (!refSampleCtx) return null;
+  const { width: nw, height: nh } = refSampleCtx.canvas;
+  const rect = refBody.getBoundingClientRect();
+  // object-fit: contain で表示しているため、余白を除いた実際の表示範囲で換算する
+  const scale = Math.min(rect.width / nw, rect.height / nh);
+  const ox = (rect.width - nw * scale) / 2;
+  const oy = (rect.height - nh * scale) / 2;
+  const x = Math.floor((clientX - rect.left - ox) / scale);
+  const y = Math.floor((clientY - rect.top - oy) / scale);
+  if (x < 0 || y < 0 || x >= nw || y >= nh) return null;
+  const [r, g, b, a] = refSampleCtx.getImageData(x, y, 1, 1).data;
+  if (a < 128) return null; // キャンバスのスポイトと同じく、透明な所では色を変えない
+  return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+function isRefPicking(e) {
+  return currentTool === 'pick' && refSampleCtx && refBody.contains(e.target);
+}
+
+// スポイト中は、カーソルの下の色をステータスバーに表示する
+refBody.addEventListener('pointermove', e => {
+  if (currentTool !== 'pick') return;
+  statColor.textContent = refColorAt(e.clientX, e.clientY) || '—';
+});
+refBody.addEventListener('pointerleave', () => {
+  if (currentTool === 'pick') statColor.textContent = '—';
+});
 
 btnRefToggle.addEventListener('click', () => {
   setRefWindowOpen(refWindow.style.display === 'none');
@@ -3543,6 +3590,12 @@ refBody.addEventListener('drop', e => {
 refWindow.addEventListener('pointerdown', e => {
   if (e.button !== 0 || e.target.closest('button') || e.target === refResize) return;
   e.preventDefault();
+  if (isRefPicking(e)) {
+    // スポイト中は画像部分では移動せず色を取る（ヘッダーをつかめば移動できる）
+    const color = refColorAt(e.clientX, e.clientY);
+    if (color) setColor(color);
+    return;
+  }
   const start = { px: e.clientX, py: e.clientY, x: refGeom.x, y: refGeom.y };
   let moved = false;
   refWindow.setPointerCapture(e.pointerId);
