@@ -704,6 +704,7 @@ input, select, textarea {
 }
 .start-card p { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
 .start-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; justify-content: center; }
+.restore-time { margin-left: 6px; font-size: 11px; opacity: 0.8; }
 
 /* パネル背景オーバーレイ（モバイル用） */
 .panel-backdrop {

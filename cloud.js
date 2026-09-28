@@ -64,6 +64,9 @@ function showToast(msg, isError) {
 
 // script.jsの「新規キャンバス」から呼ばれる。開いている作品の紐付けを解除する。
 window.clearCurrentArtwork = () => setCurrentArtwork(null, '');
+// script.jsの自動保存から呼ばれる。開いている作品を記録・復元するのに使う。
+window.getCurrentArtwork = () => (currentArtworkId ? { id: currentArtworkId, name: currentArtworkName } : null);
+window.setCurrentArtwork = (id, name) => setCurrentArtwork(id, name);
 
 // 開いている作品を切り替え、ヘッダーの作品名チップに反映する
 function setCurrentArtwork(id, name) {
@@ -152,10 +155,12 @@ async function saveArtwork(name, artworkId) {
   };
   if (artworkId) {
     await setDoc(doc(db, 'users', user.uid, 'artworks', artworkId), payload, { merge: true });
+    window.markProjectSaved();
     return artworkId;
   }
   payload.createdAt = serverTimestamp();
   const ref = await addDoc(artworksCol(user.uid), payload);
+  window.markProjectSaved();
   return ref.id;
 }
 

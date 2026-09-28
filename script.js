@@ -34,6 +34,9 @@ let selectionMask = null;   // null = all editable, or bool[][]
 let rangeStart = null;
 let rangeSelectMode = 'rect'; // 'rect' = 四角で囲う, 'free' = 自分で指定
 let rangePath = [];
+let floating = null;        // 移動ツールで動かしている最中の選択範囲（詳細は「選択範囲の移動」参照）
+let moveDrag = null;        // 移動ツールのドラッグ状態
+let clipboard = null;       // コピー／切り取りした内容
 let shapeType = 'circle'; // 'line', 'circle', 'rect', 'diamond', 'heart'
 let shapeFill = true;
 let shapeStart = null;
@@ -169,6 +172,8 @@ function activeLayerLocked() {
 function syncActiveCells() {
   activeLayerIndex = Math.max(0, Math.min(layers.length - 1, activeLayerIndex));
   cells = layers[activeLayerIndex].cells;
+  // 別のレイヤーに切り替えたら、移動中の選択範囲はその位置で確定する
+  if (floating && floating.layer !== layers[activeLayerIndex]) floating = null;
 }
 
 function initCells(c, r, keepOld) {
@@ -339,6 +344,7 @@ function drawOverlayCell(col, row) {
   ctx.clearRect(0, 0, cOv.width, cOv.height);
   drawSelectionOverlay(ctx);
   if (selectionMode === 'range' && rangeStart) return;
+  if (currentTool === 'move' && selectionMode === 'none') return; // 移動ツールにブラシ枠は不要
   if (col < 0 || col >= cols || row < 0 || row >= rows) return;
   const b = brushRect(col, row);
   const x1 = Math.max(0, b.c1) * px;
@@ -809,6 +815,10 @@ cOv.addEventListener('mousedown', e => {
     updateSelectionButtons();
     return;
   }
+  if (currentTool === 'move') {
+    startMoveDrag(col, row);
+    return;
+  }
   if (currentTool === 'shape') {
     if (activeLayerLocked()) return;
     shapeStart = {col, row};
@@ -837,6 +847,11 @@ cOv.addEventListener('mousemove', e => {
     } else {
       drawRangePreview(rangeStart.col, rangeStart.row, col, row);
     }
+    return;
+  }
+  if (moveDrag) {
+    updateMoveDrag(col, row);
+    statPos.textContent = `${col+1}, ${row+1}`;
     return;
   }
   if (currentTool === 'shape' && shapeStart) {
@@ -878,6 +893,10 @@ document.addEventListener('mouseup', e => {
     rangePath = [];
     selectionMode = 'none';
     updateSelectionButtons();
+    return;
+  }
+  if (moveDrag) {
+    endMoveDrag();
     return;
   }
   if (currentTool === 'shape' && shapeStart) {
@@ -949,6 +968,10 @@ function touchPointerDown(col, row) {
     updateSelectionButtons();
     return;
   }
+  if (currentTool === 'move') {
+    startMoveDrag(col, row);
+    return;
+  }
   if (currentTool === 'shape') {
     if (activeLayerLocked()) return;
     shapeStart = {col, row};
@@ -976,6 +999,10 @@ function touchPointerMove(col, row) {
     } else {
       drawRangePreview(rangeStart.col, rangeStart.row, col, row);
     }
+    return;
+  }
+  if (moveDrag) {
+    updateMoveDrag(col, row);
     return;
   }
   if (currentTool === 'shape' && shapeStart) {
@@ -1007,6 +1034,10 @@ function touchPointerUp(col, row) {
     updateSelectionButtons();
     return;
   }
+  if (moveDrag) {
+    endMoveDrag();
+    return;
+  }
   if (currentTool === 'shape' && shapeStart) {
     pushHistory();
     if (shapeType === 'line') {
@@ -1033,6 +1064,7 @@ cOv.addEventListener('touchstart', e => {
   if (e.touches.length >= 2) {
     isPainting = false;
     lastCell = null;
+    endMoveDrag();
     isPinching = true;
     pinchStartDist = getTouchDist(e);
     pinchStartZoom = zoom;
@@ -1088,34 +1120,84 @@ cOv.addEventListener('touchend', e => {
 });
 
 // ── ヒストリー ────────────────────────────────────────
+// history: 元に戻す用、redoStack: やり直し用。
+// 新しい操作をした時点でやり直し用の履歴は捨てる。
+// グリッドサイズの変更も戻せるよう、cols/rowsと選択範囲も一緒に記録する。
+let redoStack = [];
+const HISTORY_LIMIT = 50;
+const btnUndo = document.getElementById('btn-undo');
+const btnRedo = document.getElementById('btn-redo');
+
 function layersSnapshot() {
   return {
+    cols, rows,
     active: activeLayerIndex,
+    mask: selectionMask, // 選択範囲は作り直す一方で書き換えないため参照のままでよい
     layers: layers.map(l => ({ name: l.name, visible: l.visible, opacity: l.opacity, locked: l.locked, cells: l.cells.map(r => [...r]) })),
   };
 }
-function pushSnapshot(snap) {
+function updateHistoryButtons() {
+  btnUndo.disabled = !history.length;
+  btnRedo.disabled = !redoStack.length;
+}
+// keepFloat: 選択範囲の移動中の操作から呼ぶときだけtrue（移動状態を維持する）
+function pushSnapshot(snap, keepFloat) {
+  if (!keepFloat) floating = null;
   history.push(snap);
-  if (history.length > 50) history.shift();
-  document.getElementById('btn-undo').disabled = false;
+  if (history.length > HISTORY_LIMIT) history.shift();
+  redoStack = [];
+  updateHistoryButtons();
+  markChanged();
 }
 function pushHistory() {
   pushSnapshot(layersSnapshot());
 }
-function undo() {
-  if (!history.length) return;
-  const snap = history.pop();
+function clearHistory() {
+  history = [];
+  redoStack = [];
+  updateHistoryButtons();
+}
+function restoreSnapshot(snap) {
+  floating = null;
+  const sizeChanged = snap.cols !== cols || snap.rows !== rows;
+  cols = snap.cols;
+  rows = snap.rows;
   layers = snap.layers;
   activeLayerIndex = snap.active;
+  selectionMask = snap.mask;
   syncActiveCells();
-  drawCells();
+  if (sizeChanged) {
+    document.getElementById('stat-grid').textContent = `${cols}×${rows}`;
+    resizeCanvases();
+    syncSlidersToGrid();
+  } else {
+    drawCells();
+  }
   updateLayerPanel();
-  if (!history.length) document.getElementById('btn-undo').disabled = true;
+  updateSelectionButtons();
+  updateHistoryButtons();
+  markChanged();
 }
+function undo() {
+  if (!history.length || isPainting || moveDrag) return;
+  redoStack.push(layersSnapshot());
+  restoreSnapshot(history.pop());
+}
+function redo() {
+  if (!redoStack.length || isPainting || moveDrag) return;
+  history.push(layersSnapshot());
+  restoreSnapshot(redoStack.pop());
+}
+// キーの位置（e.code）で判定するため、日本語入力がオンでも効く。
+// Ctrl+Z: 元に戻す／Ctrl+Y・Ctrl+Shift+Z: やり直し
 document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+  if (isTypingTarget(e.target)) return; // 入力欄では文字の取り消しを優先する
+  if (e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); undo(); }
+  else if (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey)) { e.preventDefault(); redo(); }
 });
-document.getElementById('btn-undo').addEventListener('click', undo);
+btnUndo.addEventListener('click', undo);
+btnRedo.addEventListener('click', redo);
 
 // ── パネルタブ（描画／レイヤー） ──────────────────────
 const tabDrawBtn = document.getElementById('tab-draw');
@@ -1431,6 +1513,7 @@ layerOpacitySlider.addEventListener('input', () => {
 });
 layerOpacitySlider.addEventListener('change', () => {
   opacityGestureActive = false;
+  markChanged(); // ドラッグし終えた値を自動保存に反映する
 });
 
 btnLayerDup.addEventListener('click', () => {
@@ -1776,6 +1859,9 @@ const rangeAutoCloseLabel = document.getElementById('range-autoclose-label');
 const rangeAutoCloseCheckbox = document.getElementById('range-autoclose');
 
 function updateSelectionButtons() {
+  // 選択範囲が作り直されたら、移動中の中身はその位置で確定する
+  if (floating && selectionMask !== floating.mask) floating = null;
+  updateClipboardButtons();
   btnSelRange.classList.toggle('active', selectionMode === 'range');
   btnSelColor.classList.toggle('active', selectionMode === 'color');
   btnSelFlood.classList.toggle('active', selectionMode === 'flood');
@@ -1948,6 +2034,258 @@ btnSelFlood.addEventListener('click', () => {
 
 btnSelClear.addEventListener('click', clearSelection);
 
+// ── 選択範囲の移動 ────────────────────────────────────
+// 移動ツールでドラッグすると、選択範囲（選択が無ければレイヤー全体）の
+// 中身を持ち上げて動かす。動かしている間は floating に
+//   base:   持ち上げた後に残る下地（レイヤーのコピー）
+//   pixels: 持ち上げた中身（w×h、nullは透明）
+//   pmask:  選択範囲の形（w×h。レイヤー全体を動かす場合はnull）
+// を保持し、レイヤーには常に「下地＋現在位置の中身」を書き込んでおく。
+// そのため保存・サムネイル・Undoはレイヤーをそのまま扱えばよく、
+// 何度動かしても中身の下にあった絵は失われない。
+// 他の操作（描画・選択し直し・レイヤー切替・Undoなど）をした時点で
+// floating を捨てると、その位置で確定したことになる。
+function selectionBounds(mask) {
+  if (!mask) return { x: 0, y: 0, w: cols, h: rows };
+  let minR = rows, maxR = -1, minC = cols, maxC = -1;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (!mask[r][c]) continue;
+      if (r < minR) minR = r;
+      if (r > maxR) maxR = r;
+      if (c < minC) minC = c;
+      if (c > maxC) maxC = c;
+    }
+  }
+  if (maxR < 0) return null;
+  return { x: minC, y: minR, w: maxC - minC + 1, h: maxR - minR + 1 };
+}
+
+// 選択範囲の中身を切り出す（maskがnullなら範囲内すべて）
+function extractPixels(src, mask, b) {
+  const pixels = [], pmask = [];
+  for (let r = 0; r < b.h; r++) {
+    const prow = [], mrow = [];
+    for (let c = 0; c < b.w; c++) {
+      const inSel = !mask || mask[b.y + r][b.x + c];
+      prow.push(inSel ? src[b.y + r][b.x + c] : null);
+      mrow.push(inSel);
+    }
+    pixels.push(prow);
+    pmask.push(mrow);
+  }
+  return { pixels, pmask };
+}
+
+function liftSelection() {
+  const b = selectionBounds(selectionMask);
+  if (!b) return false;
+  const layer = layers[activeLayerIndex];
+  const { pixels, pmask } = extractPixels(layer.cells, selectionMask, b);
+  const base = layer.cells.map(r => [...r]);
+  for (let r = 0; r < b.h; r++) {
+    for (let c = 0; c < b.w; c++) {
+      if (pmask[r][c]) base[b.y + r][b.x + c] = null;
+    }
+  }
+  floating = {
+    layer, base, pixels,
+    pmask: selectionMask ? pmask : null,
+    x: b.x, y: b.y, w: b.w, h: b.h,
+    mask: selectionMask,
+  };
+  return true;
+}
+
+// 現在位置に置いていた中身を取り除き、下地に戻す
+function restoreFloatBase() {
+  const { layer, base, x, y, w, h } = floating;
+  for (let r = Math.max(0, y); r < Math.min(rows, y + h); r++) {
+    for (let c = Math.max(0, x); c < Math.min(cols, x + w); c++) {
+      layer.cells[r][c] = base[r][c];
+    }
+  }
+}
+
+// 現在位置に中身を書き込み、選択範囲も同じ位置へ動かす。
+// キャンバス外にはみ出した部分はpixelsに残っているので、戻せば元どおり。
+function stampFloat() {
+  const { layer, pixels, pmask, x, y, w, h } = floating;
+  for (let r = 0; r < h; r++) {
+    const tr = y + r;
+    if (tr < 0 || tr >= rows) continue;
+    for (let c = 0; c < w; c++) {
+      const tc = x + c;
+      if (tc < 0 || tc >= cols) continue;
+      const v = pixels[r][c];
+      if (v) layer.cells[tr][tc] = v; // 透明部分は下の絵を隠さない
+    }
+  }
+  if (pmask) {
+    const m = Array.from({length: rows}, () => Array(cols).fill(false));
+    for (let r = 0; r < h; r++) {
+      const tr = y + r;
+      if (tr < 0 || tr >= rows) continue;
+      for (let c = 0; c < w; c++) {
+        const tc = x + c;
+        if (tc >= 0 && tc < cols && pmask[r][c]) m[tr][tc] = true;
+      }
+    }
+    selectionMask = m;
+  }
+  floating.mask = selectionMask;
+}
+
+function moveFloatTo(x, y) {
+  if (x === floating.x && y === floating.y) return;
+  restoreFloatBase();
+  floating.x = x;
+  floating.y = y;
+  stampFloat();
+  drawCells();
+  redrawOverlay();
+}
+
+// 移動を1回ぶん始める（ドラッグ開始・矢印キー）。動かせない場合はfalse。
+function beginMove() {
+  if (activeLayerLocked()) return false;
+  if (!floating && !liftSelection()) return false;
+  pushSnapshot(layersSnapshot(), true); // 1回の移動ごとにUndoできるようにする
+  return true;
+}
+
+function startMoveDrag(col, row) {
+  if (!beginMove()) return;
+  moveDrag = { col, row, x: floating.x, y: floating.y };
+}
+function updateMoveDrag(col, row) {
+  if (!moveDrag || !floating) return;
+  moveFloatTo(moveDrag.x + col - moveDrag.col, moveDrag.y + row - moveDrag.row);
+}
+function endMoveDrag() {
+  if (!moveDrag) return;
+  moveDrag = null;
+  updateLayerThumbnails();
+}
+
+function nudgeSelection(dx, dy) {
+  if (!beginMove()) return;
+  moveFloatTo(floating.x + dx, floating.y + dy);
+  updateLayerThumbnails();
+}
+
+function redrawOverlay() {
+  const ctx = cOv.getContext('2d');
+  ctx.clearRect(0, 0, cOv.width, cOv.height);
+  drawSelectionOverlay(ctx);
+}
+
+// ── コピー・切り取り・貼り付け ────────────────────────
+// アクティブレイヤーの選択範囲が対象。貼り付けた内容は移動中の状態になるので、
+// そのまま移動ツールでドラッグして好きな位置に置ける。
+const btnCut = document.getElementById('btn-cut');
+const btnCopy = document.getElementById('btn-copy');
+const btnPaste = document.getElementById('btn-paste');
+
+function updateClipboardButtons() {
+  btnCut.disabled = btnCopy.disabled = !selectionMask;
+  btnPaste.disabled = !clipboard;
+}
+
+function copySelection() {
+  if (!started || !selectionMask) return false;
+  if (floating && floating.pmask) {
+    // 動かしている最中なら、下地と混ざる前の中身そのものをコピーする
+    const { pixels, pmask, x, y, w, h } = floating;
+    clipboard = { pixels, pmask, x, y, w, h };
+  } else {
+    const b = selectionBounds(selectionMask);
+    if (!b) return false;
+    clipboard = { ...extractPixels(cells, selectionMask, b), ...b };
+  }
+  updateClipboardButtons();
+  return true;
+}
+
+function deleteSelection() {
+  if (!started || !selectionMask || activeLayerLocked()) return false;
+  if (floating) {
+    // 動かしている中身だけを取り除けば、その下の絵が見えるようになる
+    pushSnapshot(layersSnapshot(), true);
+    restoreFloatBase();
+    floating = null;
+  } else {
+    pushHistory();
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (selectionMask[r][c]) cells[r][c] = null;
+      }
+    }
+  }
+  drawCells();
+  updateLayerThumbnails();
+  return true;
+}
+
+function cutSelection() {
+  if (activeLayerLocked()) return false;
+  return copySelection() && deleteSelection();
+}
+
+function pasteClipboard() {
+  if (!started || !clipboard || activeLayerLocked()) return false;
+  pushHistory(); // 移動中のものがあればここで確定される
+  const { pixels, pmask, w, h } = clipboard;
+  // キャンバスサイズが変わっていても見える位置に収める
+  const x = Math.max(0, Math.min(clipboard.x, cols - w));
+  const y = Math.max(0, Math.min(clipboard.y, rows - h));
+  const layer = layers[activeLayerIndex];
+  floating = { layer, base: layer.cells.map(r => [...r]), pixels, pmask, x, y, w, h, mask: null };
+  stampFloat();
+  selectionMode = 'none';
+  setTool('move');
+  drawCells();
+  updateLayerThumbnails();
+  updateSelectionButtons();
+  return true;
+}
+
+function selectAll() {
+  if (!started) return;
+  selectionMode = 'none';
+  selectionMask = Array.from({length: rows}, () => Array(cols).fill(true));
+  updateSelectionButtons();
+}
+
+btnCut.addEventListener('click', cutSelection);
+btnCopy.addEventListener('click', copySelection);
+btnPaste.addEventListener('click', pasteClipboard);
+
+const ARROW_KEYS = {
+  ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
+};
+
+document.addEventListener('keydown', e => {
+  if (!started || e.isComposing || e.altKey) return;
+  if (isTypingTarget(e.target)) return;
+  let handled = false;
+  if (e.ctrlKey || e.metaKey) {
+    if (e.shiftKey) return;
+    if (e.code === 'KeyC') handled = copySelection();
+    else if (e.code === 'KeyX') handled = cutSelection();
+    else if (e.code === 'KeyV') handled = pasteClipboard();
+    else if (e.code === 'KeyA') { selectAll(); handled = true; }
+  } else if (e.code === 'Delete' || e.code === 'Backspace') {
+    handled = deleteSelection();
+  } else if (currentTool === 'move' && ARROW_KEYS[e.code] && !isPainting && !moveDrag) {
+    const [dx, dy] = ARROW_KEYS[e.code];
+    const step = e.shiftKey ? 10 : 1;
+    nudgeSelection(dx * step, dy * step);
+    handled = true;
+  }
+  if (handled) e.preventDefault();
+});
+
 // ── 描画スタイル ──────────────────────────────────────
 const drawStyleSection = document.getElementById('draw-style-section');
 const detectLineLabel = document.getElementById('detect-line-label');
@@ -1989,6 +2327,11 @@ function setTool(t) {
   });
   updateDrawStyleVisibility();
   updateShapeMenuUI();
+  updateCanvasCursor();
+}
+
+function updateCanvasCursor() {
+  cOv.style.cursor = currentTool === 'move' ? 'move' : '';
 }
 document.querySelectorAll('.tool-btn').forEach(b => {
   b.addEventListener('click', () => setTool(b.dataset.tool));
@@ -2001,6 +2344,7 @@ const TOOL_SHORTCUTS = {
   KeyW: 'fill',
   KeyA: 'erase',
   KeyS: 'pick',
+  KeyV: 'move',
 };
 
 // レイヤー名やファイル名の入力中はショートカットを無効にする
@@ -2048,6 +2392,7 @@ document.querySelectorAll('.shape-opt[data-shape]').forEach(b => {
     currentTool = 'shape';
     document.querySelectorAll('.tool-btn').forEach(x => x.classList.remove('active'));
     updateDrawStyleVisibility();
+    updateCanvasCursor();
     updateShapeMenuUI();
     closeShapeMenu();
   });
@@ -2292,6 +2637,7 @@ document.getElementById('btn-download').addEventListener('click', () => {
   a.download = 'pixel-art.png';
   a.href = out.toDataURL('image/png');
   a.click();
+  markProjectSaved();
 });
 
 document.getElementById('btn-download-transparent').addEventListener('click', () => {
@@ -2314,6 +2660,7 @@ document.getElementById('btn-download-transparent').addEventListener('click', ()
   a.download = 'pixel-art-transparent.png';
   a.href = out.toDataURL('image/png');
   a.click();
+  markProjectSaved();
 });
 
 // ── 画像変換 ──────────────────────────────────────────
@@ -2689,8 +3036,8 @@ document.getElementById('btn-load-img').addEventListener('click', () => {
 function resetToNewCanvas() {
   initCells(32, 32, false);
   setZoom(1);
-  history = [];
-  document.getElementById('btn-undo').disabled = true;
+  clearHistory();
+  resetChangeTracking();
   clearSelection();
   clearTraceImage();
   resizeCanvases();
@@ -2943,8 +3290,11 @@ function loadProjectData(p) {
   activeLayerIndex = layers.length - 1;
   layerNameCounter = layers.length + 1;
   syncActiveCells();
-  history = [];
-  document.getElementById('btn-undo').disabled = true;
+  clearHistory();
+  resetChangeTracking();
+  floating = null;
+  selectionMask = null;
+  updateSelectionButtons();
   started = true;
   overlay.style.display = 'none';
   document.getElementById('stat-grid').textContent = `${cols}×${rows}`;
@@ -2977,11 +3327,119 @@ function isEditorStarted() {
   return started;
 }
 
+// ── 自動保存と未保存の警告 ────────────────────────────
+// 変更があるたびに少し待ってからブラウザ（localStorage）へ保存し、
+// 次に開いたときスタート画面の「前回の続きから」で復元できるようにする。
+// また、PNG保存・クラウド保存をしていない変更がある状態でタブを
+// 閉じようとしたら、ブラウザの確認ダイアログを出す。
+const AUTOSAVE_KEY = 'pixelart-autosave-v1';
+const AUTOSAVE_DELAY = 1000;
+let hasUnsavedChanges = false; // PNG保存・クラウド保存以降に変更があるか
+let autosavePending = false;   // まだ自動保存していない変更があるか
+let autosaveTimer = null;
+
+// 履歴を積む操作（＝絵が変わる操作）のたびに呼ばれる
+function markChanged() {
+  if (!started) return;
+  hasUnsavedChanges = true;
+  autosavePending = true;
+  scheduleAutosave();
+}
+
+function scheduleAutosave() {
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => flushAutosave(false), AUTOSAVE_DELAY);
+}
+
+// force: タブを閉じる直前など、描いている途中でも今すぐ保存したいとき
+function flushAutosave(force) {
+  clearTimeout(autosaveTimer);
+  if (!autosavePending || !started) return;
+  if (!force && (isPainting || moveDrag)) { scheduleAutosave(); return; } // 描き終わるまで待つ
+  autosavePending = false;
+  try {
+    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      unsaved: hasUnsavedChanges,
+      artwork: window.getCurrentArtwork ? window.getCurrentArtwork() : null,
+      project: serializeProject(),
+    }));
+  } catch (err) {
+    // 容量オーバーやプライベートブラウズでは保存できないことがある
+    console.warn('自動保存に失敗しました', err);
+  }
+}
+
+// 作品を開き直した・新規にしたときは「変更なし」の状態から数え直す
+function resetChangeTracking() {
+  clearTimeout(autosaveTimer);
+  hasUnsavedChanges = false;
+  autosavePending = false;
+}
+
+// PNG保存・クラウド保存に成功したら呼ぶ（cloud.jsからも利用）
+function markProjectSaved() {
+  hasUnsavedChanges = false;
+  if (!started) return;
+  autosavePending = true; // 「保存済み」になったことも自動保存に反映する
+  scheduleAutosave();
+}
+window.markProjectSaved = markProjectSaved;
+
+function readAutosave() {
+  try {
+    const rec = JSON.parse(localStorage.getItem(AUTOSAVE_KEY));
+    return rec && rec.project && Array.isArray(rec.project.layers) ? rec : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+const btnRestore = document.getElementById('btn-restore');
+
+function setupRestoreButton() {
+  const rec = readAutosave();
+  if (!rec) return;
+  document.getElementById('restore-time').textContent = new Date(rec.savedAt).toLocaleString('ja-JP', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
+  btnRestore.style.display = '';
+  document.getElementById('btn-new').classList.remove('primary'); // 続きからを一番目立たせる
+}
+
+btnRestore.addEventListener('click', () => {
+  const rec = readAutosave();
+  if (!rec) return;
+  try {
+    loadProjectData(rec.project);
+  } catch (err) {
+    console.warn('自動保存データの復元に失敗しました', err);
+    return;
+  }
+  // 開いていたクラウド作品の紐付け（上書き保存先）も戻す
+  if (rec.artwork && window.setCurrentArtwork) window.setCurrentArtwork(rec.artwork.id, rec.artwork.name);
+  hasUnsavedChanges = !!rec.unsaved;
+});
+
+window.addEventListener('beforeunload', e => {
+  flushAutosave(true);
+  if (started && hasUnsavedChanges) {
+    e.preventDefault();
+    e.returnValue = ''; // 古いブラウザ向け
+  }
+});
+// スマホではbeforeunloadが来ないまま閉じられることがあるため、
+// 画面が隠れた時点でも保存しておく
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushAutosave(true);
+});
+
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();
 buildCustomPalette();
 buildConvertPalette();
 setColor('#3a3a38');
+setupRestoreButton();
 initCells(cols, rows, false);
 resizeCanvases();
 syncTogglePosition();

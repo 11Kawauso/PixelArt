@@ -20,7 +20,8 @@
     <button class="bg-btn" data-bg="#000000" title="黒" style="background:#000000;"></button>
   </div>
   <button id="btn-toggle-canvas" title="キャンバス表示切替">🔲</button>
-  <button id="btn-undo" disabled title="Ctrl+Z">↩ <span class="hide-mobile">元に戻す</span></button>
+  <button id="btn-undo" disabled title="元に戻す（Ctrl+Z）">↩ <span class="hide-mobile">元に戻す</span></button>
+  <button id="btn-redo" disabled title="やり直し（Ctrl+Y）">↪ <span class="hide-mobile">やり直し</span></button>
   <button id="btn-clear" class="danger">クリア</button>
 
   <!-- ファイルメニュー -->
@@ -84,6 +85,7 @@
         <button class="tool-btn" data-tool="fill" title="塗り潰し（W）">🪣 塗り潰し</button>
         <button class="tool-btn" data-tool="erase" title="消しゴム（A）">🧹 消しゴム</button>
         <button class="tool-btn" data-tool="pick" title="スポイト（S）">💉 スポイト</button>
+        <button class="tool-btn" data-tool="move" title="移動（V）：選択範囲の中身（選択が無ければレイヤー全体）をドラッグや矢印キーで動かします" style="grid-column: span 2;">✥ 移動</button>
       </div>
     </div>
 
@@ -103,6 +105,11 @@
         <input type="checkbox" id="range-autoclose" checked style="accent-color:var(--accent)">
         始点まで自動でつなぐ
       </label>
+      <div class="tool-grid" style="grid-template-columns:1fr 1fr 1fr; margin-top:6px;">
+        <button class="sel-btn" id="btn-cut" disabled title="切り取り（Ctrl+X）">切り取り</button>
+        <button class="sel-btn" id="btn-copy" disabled title="コピー（Ctrl+C）">コピー</button>
+        <button class="sel-btn" id="btn-paste" disabled title="貼り付け（Ctrl+V）">貼り付け</button>
+      </div>
       <button id="btn-sel-clear" class="danger" style="width:100%; margin-top:6px; display:none;">選択解除</button>
     </div>
 
@@ -363,6 +370,7 @@
     <div style="font-size:15px; font-weight:500;">はじめましょう</div>
     <p>白紙から描くか、<br>画像をドット絵に変換できます</p>
     <div class="start-actions">
+      <button id="btn-restore" class="primary" style="display:none">⏪ 前回の続きから<span class="restore-time" id="restore-time"></span></button>
       <button id="btn-new" class="primary">白紙で始める</button>
       <button id="btn-load-img">画像を読み込む</button>
       <button id="btn-start-gallery">🖼 ギャラリーから開く</button>
