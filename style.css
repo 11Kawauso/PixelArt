@@ -637,6 +637,15 @@ input, select, textarea {
   border-radius: 50%;
   font-size: 15px;
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.shape-menu-btn img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain; /* 横長の画像でも縦横比を保って収める */
+  pointer-events: none;
 }
 .shape-menu-btn.active {
   background: var(--accent);
