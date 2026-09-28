@@ -930,6 +930,7 @@ cOv.addEventListener('mouseleave',() => {
 });
 
 // タッチ対応（1本指：描画・選択・図形／2本指：ピンチズーム＋パン）
+// 2本指の操作はキャンバスの周りの余白でも効くよう、キャンバスエリア側で受け取る。
 // 1本指側は、マウスのmousedown/mousemove/mouseupと同じ分岐
 // （選択モード・図形ツール・通常描画）をすべて再現する。
 let pinchStartDist = 0;
@@ -1059,64 +1060,122 @@ function touchPointerUp(col, row) {
   isPainting = false; lastCell = null;
 }
 
+// ピンチのつもりで2本の指を置くと、ほんの少し早く触れた1本目で描き始めてしまう。
+// 1本目から少しの間に2本目が来たら「最初からピンチだった」とみなし、1本目で始めた
+// 操作（点・図形・範囲選択・移動）を丸ごと取り消す。長く描いた後に2本目が来た場合は、
+// それまでの線を残して終える。
+const PINCH_GRACE_MS = 300;
+let singleTouchStart = null; // 1本目が触れた時点の {time, historyLen, redo, unsaved}
+
+function cancelSingleTouchGesture() {
+  const t = singleTouchStart;
+  singleTouchStart = null;
+  const justStarted = t && performance.now() - t.time < PINCH_GRACE_MS;
+  if (isPainting || moveDrag) {
+    if (justStarted && history.length === t.historyLen + 1) {
+      // 1本目が積んだ履歴を使って描く前の状態に戻し、やり直し用の履歴も元どおりにする
+      isPainting = false;
+      lastCell = null;
+      moveDrag = null;
+      restoreSnapshot(history.pop());
+      redoStack = t.redo;
+      hasUnsavedChanges = t.unsaved;
+      updateHistoryButtons();
+      updateLayerThumbnails();
+    } else {
+      if (isPainting) updateLayerThumbnails();
+      isPainting = false;
+      lastCell = null;
+      endMoveDrag();
+    }
+  }
+  // 図形・範囲選択はまだ確定前なので、始点を捨てるだけでよい
+  shapeStart = null;
+  rangeStart = null;
+  rangePath = [];
+  redrawOverlay();
+}
+
 cOv.addEventListener('touchstart', e => {
   e.preventDefault();
-  if (e.touches.length >= 2) {
-    isPainting = false;
-    lastCell = null;
-    endMoveDrag();
-    isPinching = true;
-    pinchStartDist = getTouchDist(e);
-    pinchStartZoom = zoom;
-    const ctr = getTouchCenter(e);
-    const wrapRect = wrap.getBoundingClientRect();
-    pinchContentX = (ctr.x - wrapRect.left) / pinchStartZoom;
-    pinchContentY = (ctr.y - wrapRect.top) / pinchStartZoom;
-    return;
-  }
+  if (e.touches.length >= 2) return; // ピンチはキャンバスエリア側で扱う
   if (!started) return;
-  isPinching = false;
-  const t = e.touches[0];
-  const {col, row} = getCell(t);
+  singleTouchStart = {
+    time: performance.now(),
+    historyLen: history.length,
+    redo: redoStack,
+    unsaved: hasUnsavedChanges,
+  };
+  const {col, row} = getCell(e.touches[0]);
   touchPointerDown(col, row);
 }, {passive: false});
 
 cOv.addEventListener('touchmove', e => {
   e.preventDefault();
-  if (isPinching && e.touches.length >= 2) {
-    const dist = getTouchDist(e);
-    const scale = dist / pinchStartDist;
-    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchStartZoom * scale));
-
-    setZoom(newZoom); // zoomは内部でMIN_ZOOM〜MAX_ZOOMにクランプされる
-
-    // パディング量がzoomに応じて非線形に変わる（updateScrollPadding参照）ため、
-    // 比率計算ではなく、実際にレイアウトされたwrapの位置を測定して補正する
-    // （マウスホイールズームと同じ方式。詳細はそちらのコメント参照）。
-    const ctr = getTouchCenter(e);
-    const wrapRectNow = wrap.getBoundingClientRect();
-    const desiredLeft = ctr.x - pinchContentX * zoom;
-    const desiredTop = ctr.y - pinchContentY * zoom;
-    canvasArea.scrollLeft += wrapRectNow.left - desiredLeft;
-    canvasArea.scrollTop  += wrapRectNow.top - desiredTop;
-    return;
-  }
-  if (!started) return;
-  const t = e.touches[0];
-  const {col, row} = getCell(t);
+  if (isPinching || e.touches.length >= 2 || !started) return;
+  const {col, row} = getCell(e.touches[0]);
   touchPointerMove(col, row);
 }, {passive: false});
 
 cOv.addEventListener('touchend', e => {
-  if (e.touches.length < 2) isPinching = false;
   if (e.touches.length > 0) return;
+  singleTouchStart = null;
   const t = e.changedTouches[0];
-  if (t && started) {
+  if (t && started && !isPinching) {
     const {col, row} = getCell(t);
     touchPointerUp(col, row);
   } else {
     isPainting = false; lastCell = null;
   }
+});
+cOv.addEventListener('touchcancel', () => cancelSingleTouchGesture());
+
+// ── ピンチで拡大縮小（キャンバスの上でも、周りの余白でも） ──
+// キャンバス上のタッチもここまで伝わってくるので、2本指の操作はすべてここで扱う。
+canvasArea.addEventListener('touchstart', e => {
+  if (e.touches.length < 2) return;
+  e.preventDefault(); // ブラウザによるページ全体の拡大縮小を止める
+  if (!isPinching) cancelSingleTouchGesture();
+  isPinching = true;
+  pinchStartDist = getTouchDist(e) || 1;
+  pinchStartZoom = zoom;
+  const ctr = getTouchCenter(e);
+  const wrapRect = wrap.getBoundingClientRect();
+  pinchContentX = (ctr.x - wrapRect.left) / pinchStartZoom;
+  pinchContentY = (ctr.y - wrapRect.top) / pinchStartZoom;
+}, {passive: false});
+
+canvasArea.addEventListener('touchmove', e => {
+  if (!isPinching || e.touches.length < 2) return;
+  e.preventDefault();
+  const dist = getTouchDist(e);
+  const scale = dist / pinchStartDist;
+  const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchStartZoom * scale));
+
+  setZoom(newZoom); // zoomは内部でMIN_ZOOM〜MAX_ZOOMにクランプされる
+
+  // パディング量がzoomに応じて非線形に変わる（updateScrollPadding参照）ため、
+  // 比率計算ではなく、実際にレイアウトされたwrapの位置を測定して補正する
+  // （マウスホイールズームと同じ方式。詳細はそちらのコメント参照）。
+  const ctr = getTouchCenter(e);
+  const wrapRectNow = wrap.getBoundingClientRect();
+  const desiredLeft = ctr.x - pinchContentX * zoom;
+  const desiredTop = ctr.y - pinchContentY * zoom;
+  canvasArea.scrollLeft += wrapRectNow.left - desiredLeft;
+  canvasArea.scrollTop  += wrapRectNow.top - desiredTop;
+}, {passive: false});
+
+// 指を1本ずつ離したとき、残った指で描き始めないよう、全部離れるまでピンチ扱いを続ける
+function endPinchIfAllLifted(e) {
+  if (e.touches.length === 0) isPinching = false;
+}
+canvasArea.addEventListener('touchend', endPinchIfAllLifted);
+canvasArea.addEventListener('touchcancel', endPinchIfAllLifted);
+
+// iPhone・iPadのSafariは独自のピンチ操作（gesture系イベント）でもページを拡大縮小するため、
+// ページ全体で止めておく（参考画像ウィンドウなど、必要な所は自前で拡大縮小している）
+['gesturestart', 'gesturechange'].forEach(type => {
+  document.addEventListener(type, e => e.preventDefault(), {passive: false});
 });
 
 // ── ヒストリー ────────────────────────────────────────
