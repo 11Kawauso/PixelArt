@@ -449,6 +449,28 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 }
 .confirm-actions { display: flex; gap: 8px; justify-content: center; }
 
+/* パレット書き出しの形式ボタン（拡張子＋対応ソフトの2行） */
+.palette-export-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.palette-export-options button {
+  height: auto; /* ボタン共通の高さ固定(28px)だと2行が収まらない */
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 10px 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.palette-export-options button span {
+  font-size: 10px;
+  font-weight: normal;
+  opacity: 0.8;
+}
+
 input[type=color] {
   width: 100%;
   height: 28px;

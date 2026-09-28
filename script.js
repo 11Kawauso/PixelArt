@@ -1650,13 +1650,31 @@ const customColorPicker = document.getElementById('custom-color-picker');
 const btnDeleteMode = document.getElementById('btn-delete-mode');
 const btnDeleteAll = document.getElementById('btn-delete-all');
 const confirmModal = document.getElementById('confirm-delete-all');
-let customColors = Array(CUSTOM_PALETTE_SIZE).fill(null);
+// カスタムカラーはこのブラウザに記憶し、次に開いたときも残るようにする。
+// 変更は必ずbuildCustomPaletteで描き直されるので、そこで保存している。
+const CUSTOM_COLORS_KEY = 'pixelart-custom-colors';
+function loadCustomColors() {
+  const colors = Array(CUSTOM_PALETTE_SIZE).fill(null);
+  try {
+    const saved = JSON.parse(localStorage.getItem(CUSTOM_COLORS_KEY));
+    if (Array.isArray(saved)) {
+      saved.slice(0, CUSTOM_PALETTE_SIZE).forEach((c, i) => {
+        if (typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)) colors[i] = c.toLowerCase();
+      });
+    }
+  } catch (err) { /* 読めなければ空のパレットから始める */ }
+  return colors;
+}
+function saveCustomColors() {
+  try { localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(customColors)); } catch (err) { /* 記憶できなくても使うのに支障はない */ }
+}
+let customColors = loadCustomColors();
 let deleteMode = false;
 let pendingSlotIndex = -1;
 // 色選択モーダル・全削除確認モーダルは「カスタムカラー」と
 // 「画像から変換に使う色」で共用するため、対象を覚えておく。
 let pendingSlotTarget = 'custom'; // 'custom' | 'convert'
-let deleteAllTarget = 'custom';
+let deleteAllTarget = 'custom';   // 'custom' | 'convert' | 'import'（パレット読み込みの上書き確認）
 
 function buildCustomPalette() {
   customPaletteGrid.innerHTML = '';
@@ -1691,6 +1709,8 @@ function buildCustomPalette() {
       customPaletteGrid.appendChild(s);
     }
   });
+  btnPaletteExport.disabled = !customColors.some(Boolean);
+  saveCustomColors();
 }
 
 document.getElementById('btn-color-ok').addEventListener('click', () => {
@@ -1729,6 +1749,8 @@ document.getElementById('btn-confirm-ok').addEventListener('click', () => {
   if (deleteAllTarget === 'convert') {
     convertPaletteColors.fill(null);
     buildConvertPalette();
+  } else if (deleteAllTarget === 'import') {
+    applyImportedPalette();
   } else {
     customColors.fill(null);
     buildCustomPalette();
@@ -1737,7 +1759,152 @@ document.getElementById('btn-confirm-ok').addEventListener('click', () => {
 });
 
 document.getElementById('btn-confirm-no').addEventListener('click', () => {
+  pendingImport = null;
   confirmModal.style.display = 'none';
+});
+
+// ── パレットの書き出し・読み込み ──────────────────────
+// カスタムカラーをファイルとして書き出し、他のソフトやLospecのパレットを読み込む。
+// 書き出し: .hex（1行に1色、Lospec形式）／.gpl（GIMP形式。Asepriteなどでも使える）
+// 読み込み: 上記に加えて .pal（JASC-PAL）・.txt（Paint.NET）・パレット画像（.pngなど）
+const btnPaletteExport = document.getElementById('btn-palette-export');
+const btnPaletteImport = document.getElementById('btn-palette-import');
+const paletteFileInput = document.getElementById('palette-file-input');
+const customPaletteHint = document.getElementById('custom-palette-hint');
+const paletteExportModal = document.getElementById('palette-export-modal');
+let pendingImport = null; // 上書き確認中の読み込み結果 {colors, total, name}
+
+function showPaletteHint(text) {
+  customPaletteHint.textContent = text;
+  customPaletteHint.style.display = text ? '' : 'none';
+}
+
+function downloadText(filename, text) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function exportPalette(format) {
+  paletteExportModal.style.display = 'none';
+  const colors = customColors.filter(Boolean);
+  if (!colors.length) return;
+  if (format === 'gpl') {
+    const lines = colors.map(hex => {
+      const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+      return `${String(r).padStart(3)} ${String(g).padStart(3)} ${String(b).padStart(3)}\t${hex.slice(1)}`;
+    });
+    downloadText('palette.gpl', ['GIMP Palette', 'Name: PixelArt', 'Columns: 8', '#', ...lines, ''].join('\n'));
+  } else {
+    downloadText('palette.hex', colors.map(hex => hex.slice(1)).join('\n') + '\n');
+  }
+  showPaletteHint(`${colors.length}色を書き出しました`);
+}
+
+// テキスト形式のパレットから色を取り出す。形式ごとに分けず、1行ずつ
+// 「16進6桁（#は任意）」「16進8桁（Paint.NETのAARRGGBB）」「R G B の3つの数」
+// のどれかに当てはまる行を色として読む。見出し行（GIMP Palette・JASC-PAL・
+// Name:・色数など）やコメント行（; や # で始まる行）はどれにも当てはまらないので自然に飛ばされる。
+function parsePaletteText(text) {
+  const colors = [];
+  const toHex = v => v.toString(16).padStart(2, '0');
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    let m;
+    if ((m = line.match(/^#?([0-9a-f]{6})$/i))) {
+      colors.push('#' + m[1].toLowerCase());
+    } else if ((m = line.match(/^([0-9a-f]{2})([0-9a-f]{6})$/i))) {
+      colors.push('#' + m[2].toLowerCase());
+    } else if ((m = line.match(/^(\d{1,3})\s+(\d{1,3})\s+(\d{1,3})(\s|$)/))) {
+      const rgb = [m[1], m[2], m[3]].map(Number);
+      if (rgb.every(v => v <= 255)) colors.push('#' + rgb.map(toHex).join(''));
+    }
+  }
+  return colors;
+}
+
+// パレット画像（Lospecの .png など）から、左上から順に現れた色を取り出す。
+// 拡大版（8倍・32倍）でも同じ色が続くだけなので、重複を除けば元の並びになる。
+function parsePaletteImage(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const cv = document.createElement('canvas');
+      cv.width = img.naturalWidth;
+      cv.height = img.naturalHeight;
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const data = ctx.getImageData(0, 0, cv.width, cv.height).data;
+      const colors = [];
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 128) continue; // 透明な部分は色として扱わない
+        colors.push('#' + [data[i], data[i + 1], data[i + 2]].map(v => v.toString(16).padStart(2, '0')).join(''));
+      }
+      URL.revokeObjectURL(url);
+      resolve(colors);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('画像を読み込めませんでした')); };
+    img.src = url;
+  });
+}
+
+async function importPaletteFile(file) {
+  if (!file) return;
+  let colors;
+  try {
+    colors = file.type.startsWith('image/')
+      ? await parsePaletteImage(file)
+      : parsePaletteText(await file.text());
+  } catch (err) {
+    showPaletteHint('ファイルを読み込めませんでした');
+    return;
+  }
+  const unique = [...new Set(colors)];
+  if (!unique.length) {
+    showPaletteHint('このファイルからは色が見つかりませんでした');
+    return;
+  }
+  pendingImport = { colors: unique.slice(0, CUSTOM_PALETTE_SIZE), total: unique.length };
+  if (customColors.some(Boolean)) {
+    // 今のカスタムカラーが消えてしまうので、先に確認する
+    deleteAllTarget = 'import';
+    confirmModal.querySelector('p').textContent =
+      `今のカスタムカラーを、読み込んだ${pendingImport.colors.length}色に置き換えますか？`;
+    confirmModal.style.display = 'flex';
+  } else {
+    applyImportedPalette();
+  }
+}
+
+function applyImportedPalette() {
+  if (!pendingImport) return;
+  const { colors, total } = pendingImport;
+  pendingImport = null;
+  customColors = Array.from({ length: CUSTOM_PALETTE_SIZE }, (_, i) => colors[i] || null);
+  deleteMode = false;
+  btnDeleteMode.classList.remove('active');
+  buildCustomPalette();
+  showPaletteHint(total > CUSTOM_PALETTE_SIZE
+    ? `${total}色のうち、先頭の${CUSTOM_PALETTE_SIZE}色を読み込みました（枠が${CUSTOM_PALETTE_SIZE}色までのため）`
+    : `${colors.length}色を読み込みました`);
+}
+
+btnPaletteExport.addEventListener('click', () => {
+  if (customColors.some(Boolean)) paletteExportModal.style.display = 'flex';
+});
+document.getElementById('btn-export-hex').addEventListener('click', () => exportPalette('hex'));
+document.getElementById('btn-export-gpl').addEventListener('click', () => exportPalette('gpl'));
+document.getElementById('btn-export-cancel').addEventListener('click', () => {
+  paletteExportModal.style.display = 'none';
+});
+btnPaletteImport.addEventListener('click', () => paletteFileInput.click());
+paletteFileInput.addEventListener('change', e => {
+  importPaletteFile(e.target.files[0]);
+  paletteFileInput.value = ''; // 同じファイルをもう一度選んでも読み込めるようにする
 });
 
 // ── 画像から変換に使う色（専用パレット） ──────────────

@@ -181,6 +181,26 @@
         <button id="btn-delete-mode">削除</button>
         <button id="btn-delete-all" class="danger">全削除</button>
       </div>
+      <div class="custom-palette-actions">
+        <button id="btn-palette-export" title="カスタムカラーをファイルに書き出す（.hex / .gpl）">書き出し</button>
+        <button id="btn-palette-import" title="パレットファイルを読み込む（.hex / .gpl / .pal / .txt / .png）">読み込み</button>
+      </div>
+      <input type="file" id="palette-file-input" accept=".hex,.gpl,.pal,.txt,.png,.gif,.bmp" style="display:none">
+      <div class="layer-hint" id="custom-palette-hint" style="display:none"></div>
+    </div>
+
+    <!-- パレット書き出し形式の選択モーダル -->
+    <div class="confirm-modal" id="palette-export-modal" style="display:none">
+      <div class="confirm-card">
+        <p>書き出す形式を選んでください</p>
+        <div class="palette-export-options">
+          <button id="btn-export-hex" class="primary">.hex<span>Lospec など</span></button>
+          <button id="btn-export-gpl" class="primary">.gpl<span>GIMP・Aseprite など</span></button>
+        </div>
+        <div class="confirm-actions">
+          <button id="btn-export-cancel">キャンセル</button>
+        </div>
+      </div>
     </div>
 
     <!-- 色選択モーダル -->
