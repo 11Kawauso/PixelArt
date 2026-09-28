@@ -1086,9 +1086,9 @@ cOv.addEventListener('touchmove', e => {
   if (isPinching && e.touches.length >= 2) {
     const dist = getTouchDist(e);
     const scale = dist / pinchStartDist;
-    const newZoom = Math.max(0.5, Math.min(8, pinchStartZoom * scale));
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchStartZoom * scale));
 
-    setZoom(newZoom); // zoomは内部で0.5〜8にクランプされる
+    setZoom(newZoom); // zoomは内部でMIN_ZOOM〜MAX_ZOOMにクランプされる
 
     // パディング量がzoomに応じて非線形に変わる（updateScrollPadding参照）ため、
     // 比率計算ではなく、実際にレイアウトされたwrapの位置を測定して補正する
@@ -2489,8 +2489,10 @@ document.getElementById('show-grid').addEventListener('change', e => {
 });
 
 // ── ズーム ────────────────────────────────────────────
+// 大きなグリッドを全体表示できるよう、縮小は10%まで許可する
+const MIN_ZOOM = 0.1, MAX_ZOOM = 8;
 function setZoom(z) {
-  zoom = Math.max(0.5, Math.min(8, z));
+  zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
   const {w, h} = canvasSize();
   wrap.style.width  = (w * zoom) + 'px';
   wrap.style.height = (h * zoom) + 'px';
@@ -2523,7 +2525,7 @@ document.getElementById('canvas-area').addEventListener('wheel', e => {
   const contentX = (e.clientX - wrapRectBefore.left) / oldZoom;
   const contentY = (e.clientY - wrapRectBefore.top) / oldZoom;
 
-  setZoom(newZoom); // zoomは内部で0.5〜8にクランプされる
+  setZoom(newZoom); // zoomは内部でMIN_ZOOM〜MAX_ZOOMにクランプされる
 
   const wrapRectAfter = wrap.getBoundingClientRect();
   const desiredLeft = e.clientX - contentX * zoom;
