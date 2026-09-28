@@ -3436,6 +3436,165 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') flushAutosave(true);
 });
 
+// ── 参考画像ウィンドウ ────────────────────────────────
+// キャンバスとは別に、画面上に参考画像を小さく浮かべて表示する。
+// トレースと違って絵を描いても隠れない。ドラッグで移動、右下の角で拡大縮小でき、
+// 縦横比は画像に合わせて固定する。位置と大きさはこのブラウザに記憶する
+// （画像そのものは容量が大きくなりうるため記憶しない）。
+const refWindow = document.getElementById('ref-window');
+const refBody = document.getElementById('ref-body');
+const refImg = document.getElementById('ref-img');
+const refEmpty = document.getElementById('ref-empty');
+const refResize = document.getElementById('ref-resize');
+const refFileInput = document.getElementById('ref-file-input');
+const btnRefToggle = document.getElementById('btn-ref-toggle');
+const REF_GEOMETRY_KEY = 'pixelart-ref-window';
+const REF_HEADER_H = 28;
+const REF_MIN_W = 120;
+const REF_EMPTY_ASPECT = 4 / 3; // 画像を選ぶ前の枠の縦横比
+
+// x, y: ウィンドウ左上の画面座標、w: 幅（高さは縦横比から決まる）
+let refGeom = null;
+let refAspect = REF_EMPTY_ASPECT;
+
+function loadRefGeometry() {
+  try {
+    const g = JSON.parse(localStorage.getItem(REF_GEOMETRY_KEY));
+    if (g && [g.x, g.y, g.w].every(Number.isFinite)) return g;
+  } catch (err) { /* 読めなければ既定の位置にする */ }
+  const w = Math.min(240, Math.round(window.innerWidth * 0.6));
+  return { x: window.innerWidth - w - 28, y: 100, w };
+}
+
+function saveRefGeometry() {
+  try { localStorage.setItem(REF_GEOMETRY_KEY, JSON.stringify(refGeom)); } catch (err) { /* 記憶できなくても動作に支障はない */ }
+}
+
+// 画面からはみ出さないように大きさと位置を収めて反映する
+function layoutRefWindow() {
+  const maxW = Math.max(REF_MIN_W, Math.min(
+    window.innerWidth - 16,
+    (window.innerHeight - 16 - REF_HEADER_H) * refAspect,
+  ));
+  refGeom.w = Math.round(Math.max(REF_MIN_W, Math.min(maxW, refGeom.w)));
+  const h = Math.round(refGeom.w / refAspect) + REF_HEADER_H;
+  refGeom.x = Math.round(Math.max(0, Math.min(window.innerWidth - refGeom.w, refGeom.x)));
+  refGeom.y = Math.round(Math.max(0, Math.min(window.innerHeight - h, refGeom.y)));
+  refWindow.style.left = refGeom.x + 'px';
+  refWindow.style.top = refGeom.y + 'px';
+  refWindow.style.width = refGeom.w + 'px';
+  refWindow.style.height = h + 'px';
+  // 小さなドット絵を拡大表示するときはぼかさずにくっきり見せる
+  refImg.style.imageRendering = refImg.naturalWidth && refGeom.w > refImg.naturalWidth ? 'pixelated' : 'auto';
+}
+
+function setRefWindowOpen(open) {
+  if (open) {
+    if (!refGeom) refGeom = loadRefGeometry();
+    refWindow.style.display = 'flex';
+    layoutRefWindow();
+  } else {
+    refWindow.style.display = 'none';
+  }
+  btnRefToggle.classList.toggle('active', open);
+  btnRefToggle.title = open ? '参考画像を閉じる' : '参考画像を表示';
+}
+
+function loadRefImageFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      refImg.src = img.src;
+      refImg.style.display = '';
+      refEmpty.style.display = 'none';
+      refAspect = img.naturalWidth / img.naturalHeight;
+      // タイトルにファイル名を出す（textContentなのでHTMLとして解釈されない）
+      refWindow.querySelector('.ref-title').textContent = file.name;
+      refWindow.title = file.name;
+      setRefWindowOpen(true);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+btnRefToggle.addEventListener('click', () => {
+  setRefWindowOpen(refWindow.style.display === 'none');
+});
+document.getElementById('btn-ref-close').addEventListener('click', () => setRefWindowOpen(false));
+document.getElementById('btn-ref-change').addEventListener('click', () => refFileInput.click());
+refFileInput.addEventListener('change', e => {
+  loadRefImageFile(e.target.files[0]);
+  refFileInput.value = ''; // 同じ画像をもう一度選んでも読み込めるようにする
+});
+
+refBody.addEventListener('dragover', e => { e.preventDefault(); refBody.classList.add('drag-over'); });
+refBody.addEventListener('dragleave', () => refBody.classList.remove('drag-over'));
+refBody.addEventListener('drop', e => {
+  e.preventDefault();
+  refBody.classList.remove('drag-over');
+  loadRefImageFile(e.dataTransfer.files[0]);
+});
+
+// ウィンドウのどこをつかんでも移動できる（ボタンと右下のつまみを除く）。
+// 画像が未選択のときは、動かさずに離したら画像選択を開く。
+refWindow.addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('button') || e.target === refResize) return;
+  e.preventDefault();
+  const start = { px: e.clientX, py: e.clientY, x: refGeom.x, y: refGeom.y };
+  let moved = false;
+  refWindow.setPointerCapture(e.pointerId);
+  const onMove = ev => {
+    const dx = ev.clientX - start.px, dy = ev.clientY - start.py;
+    if (!moved && Math.abs(dx) + Math.abs(dy) < 4) return; // 小さな手ぶれはクリック扱い
+    moved = true;
+    refGeom.x = start.x + dx;
+    refGeom.y = start.y + dy;
+    layoutRefWindow();
+  };
+  const onUp = () => {
+    refWindow.removeEventListener('pointermove', onMove);
+    refWindow.removeEventListener('pointerup', onUp);
+    refWindow.removeEventListener('pointercancel', onUp);
+    if (moved) saveRefGeometry();
+    else if (refEmpty.style.display !== 'none' && refBody.contains(e.target)) refFileInput.click();
+  };
+  refWindow.addEventListener('pointermove', onMove);
+  refWindow.addEventListener('pointerup', onUp);
+  refWindow.addEventListener('pointercancel', onUp);
+});
+
+// 右下のつまみで拡大縮小（左上の位置は固定し、縦横比を保つ）
+refResize.addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const start = { px: e.clientX, py: e.clientY, w: refGeom.w };
+  refResize.setPointerCapture(e.pointerId);
+  const onMove = ev => {
+    const dx = ev.clientX - start.px;
+    const dy = (ev.clientY - start.py) * refAspect; // 縦の移動量を幅に換算
+    // 横と縦のうち大きく動かした方に合わせる
+    refGeom.w = start.w + (Math.abs(dx) >= Math.abs(dy) ? dx : dy);
+    layoutRefWindow();
+  };
+  const onUp = () => {
+    refResize.removeEventListener('pointermove', onMove);
+    refResize.removeEventListener('pointerup', onUp);
+    refResize.removeEventListener('pointercancel', onUp);
+    saveRefGeometry();
+  };
+  refResize.addEventListener('pointermove', onMove);
+  refResize.addEventListener('pointerup', onUp);
+  refResize.addEventListener('pointercancel', onUp);
+});
+
+window.addEventListener('resize', () => {
+  if (refWindow.style.display !== 'none') layoutRefWindow();
+});
+
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();
 buildCustomPalette();

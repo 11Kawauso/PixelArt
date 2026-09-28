@@ -378,6 +378,30 @@
   </div>
 </div>
 
+<!-- 参考画像（画面右上固定・図形ボタンの左） -->
+<button class="ref-toggle" id="btn-ref-toggle" title="参考画像を表示">
+  <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+    <rect x="2.5" y="4" width="19" height="16" rx="2" fill="#fff" stroke="#5596ff" stroke-width="2"/>
+    <circle cx="8.5" cy="9.5" r="2" fill="#ffc21a"/>
+    <path d="M4 18.5l5-5.5 3 3 4-5 4.5 7.5z" fill="#3cb96b"/>
+  </svg>
+</button>
+<input type="file" id="ref-file-input" accept="image/*" style="display:none">
+
+<!-- 参考画像ウィンドウ（ドラッグで移動・右下の角で拡大縮小） -->
+<div class="ref-window" id="ref-window" style="display:none">
+  <div class="ref-header">
+    <span class="ref-title">参考画像</span>
+    <button class="ref-header-btn" id="btn-ref-change" title="画像を変更">📁</button>
+    <button class="ref-header-btn" id="btn-ref-close" title="閉じる">✕</button>
+  </div>
+  <div class="ref-body" id="ref-body">
+    <img id="ref-img" alt="参考画像" draggable="false" style="display:none">
+    <div class="ref-empty" id="ref-empty">クリックまたはドロップで<br>画像を選択</div>
+  </div>
+  <div class="ref-resize" id="ref-resize" title="ドラッグで大きさを変更"></div>
+</div>
+
 <!-- テンプレート図形メニュー（画面右上固定） -->
 <div class="shape-menu" id="shape-menu">
   <button class="shape-menu-btn" id="btn-shape-menu" title="テンプレート図形"><img src="images/shape-icon.png" alt="テンプレート図形"></button>
