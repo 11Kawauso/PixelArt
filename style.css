@@ -190,11 +190,13 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 /* ツール選択 */
 .tool-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); /* 中身が長くてもパネル幅からはみ出さない */
   gap: 5px;
 }
 .tool-btn {
   width: 100%;
+  min-width: 0;
+  padding: 5px 6px; /* ショートカットキーの表示ぶん、左右の余白を詰める */
   height: 34px;
   border-radius: var(--radius);
   font-size: 12px;
@@ -204,6 +206,29 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+/* ツール名の横に出すショートカットキー（キーボードのキーの形） */
+.key-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  margin-left: 5px;
+  padding: 0 3px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+  background: var(--surface);
+}
+.tool-btn.active .key-hint {
+  color: #fff;
+  background: transparent;
+  border-color: rgba(255,255,255,0.5);
 }
 
 /* トレース重ね順ボタン */
@@ -842,6 +867,7 @@ input, select, textarea {
   header { height: 40px; gap: 6px; padding: 0 8px; }
   header h1 { font-size: 13px; }
   .hide-mobile { display: none; }
+  .key-hint { display: none; } /* スマホにはキーボードが無いため */
 
   /* パネル：オーバーレイドロワー */
   .panel {
