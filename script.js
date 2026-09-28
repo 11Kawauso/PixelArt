@@ -1199,6 +1199,17 @@ document.addEventListener('keydown', e => {
 btnUndo.addEventListener('click', undo);
 btnRedo.addEventListener('click', redo);
 
+// Macでは Ctrl ではなく ⌘ を使うので、ボタンのキー表示をMacの書き方に合わせる
+// （やり直しはMacで一般的な ⌘⇧Z を表示する。⌘Y でも動く）
+if (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) {
+  const MAC_SHORTCUTS = { undo: ['⌘Z', '元に戻す（⌘Z）'], redo: ['⌘⇧Z', 'やり直し（⌘⇧Z）'] };
+  document.querySelectorAll('[data-shortcut]').forEach(k => {
+    const [label, title] = MAC_SHORTCUTS[k.dataset.shortcut];
+    k.textContent = label;
+    k.closest('button').title = title;
+  });
+}
+
 // ── パネルタブ（描画／レイヤー） ──────────────────────
 const tabDrawBtn = document.getElementById('tab-draw');
 const tabLayersBtn = document.getElementById('tab-layers');

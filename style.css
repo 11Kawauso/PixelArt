@@ -225,6 +225,10 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   color: var(--text-muted);
   background: var(--surface);
 }
+/* ヘッダーはボタンが多く、ログイン中や作品名表示中は幅に余裕がないため、広い画面でだけ出す */
+@media (max-width: 1099px) {
+  header .key-hint { display: none; }
+}
 .tool-btn.active .key-hint {
   color: #fff;
   background: transparent;
