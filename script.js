@@ -307,6 +307,8 @@ function updateGridOverlay() {
   const visible = showGrid && displayed >= 4;
   gridOverlay.style.display = visible ? '' : 'none';
   if (visible) gridOverlay.style.setProperty('--cell-size', displayed + 'px');
+  // 1マスの表示サイズやマス数が変わったので、定規と列・行の強調も合わせる
+  updateLineHighlights();
 }
 
 function drawGrid() {
@@ -2726,6 +2728,259 @@ document.getElementById('show-grid').addEventListener('change', e => {
   showGrid = e.target.checked;
   drawGrid();
 });
+
+// ── 定規と列・行の強調 ────────────────────────────────
+// キャンバスエリアの上（列）と左（行）に、左上を(1,1)とするマス番号の定規を出す。
+// 定規はスクロールや拡大縮小に合わせて描き直し、数字の間隔は倍率に応じて間引く。
+// 列・行は別々に、1本または範囲で強調でき、パネルの入力欄か定規のクリック・ドラッグで選ぶ。
+const canvasStage = document.getElementById('canvas-stage');
+const rulerTop = document.getElementById('ruler-top');
+const rulerLeft = document.getElementById('ruler-left');
+const rulerCorner = document.getElementById('ruler-corner');
+const colHighlight = document.getElementById('col-highlight');
+const rowHighlight = document.getElementById('row-highlight');
+const colRangeInput = document.getElementById('col-range-input');
+const rowRangeInput = document.getElementById('row-range-input');
+const SHOW_RULERS_KEY = 'pixelart-show-rulers';
+// 数字の間隔の候補（マス数）。数字どうしが重ならない一番細かいものを使う
+const RULER_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+
+// 強調中の範囲（1始まり、両端を含む）。nullなら強調なし
+const lineHighlight = { col: null, row: null };
+let rulerHover = null; // カーソルのあるマス {col, row}（0始まり）
+let rulerDrawPending = false;
+
+// 「60」「60-80」「８０〜６０」などを {start, end} にする。空ならnull、読めなければfalse。
+function parseLineRange(text) {
+  const t = text.normalize('NFKC').replace(/\s/g, ''); // 全角数字・記号を半角にそろえる
+  if (!t) return null;
+  const m = t.match(/^(\d+)(?:[-~〜ー:]+(\d+))?$/);
+  if (!m) return false;
+  let a = parseInt(m[1], 10), b = m[2] ? parseInt(m[2], 10) : a;
+  if (a > b) [a, b] = [b, a];
+  if (a < 1) return false;
+  return { start: a, end: b };
+}
+
+function formatLineRange(r) {
+  return r ? (r.start === r.end ? String(r.start) : `${r.start}-${r.end}`) : '';
+}
+
+// 強調をキャンバス上の帯として表示する。キャンバスに対する割合で置くので、
+// 拡大縮小してもそのまま追従する。範囲がキャンバスをはみ出す分は切り詰める。
+function updateLineHighlights() {
+  const place = (el, range, total, vertical) => {
+    const visible = range && range.start <= total;
+    el.style.display = visible ? '' : 'none';
+    if (!visible) return;
+    const start = (range.start - 1) / total * 100;
+    const size = (Math.min(range.end, total) - range.start + 1) / total * 100;
+    if (vertical) {
+      Object.assign(el.style, { left: start + '%', width: size + '%', top: '0', height: '100%' });
+    } else {
+      Object.assign(el.style, { top: start + '%', height: size + '%', left: '0', width: '100%' });
+    }
+  };
+  place(colHighlight, lineHighlight.col, cols, true);
+  place(rowHighlight, lineHighlight.row, rows, false);
+  rulerCorner.classList.toggle('has-highlight', !!(lineHighlight.col || lineHighlight.row));
+  scheduleRulerDraw();
+}
+
+function setLineHighlight(axis, range) {
+  lineHighlight[axis] = range;
+  const input = axis === 'col' ? colRangeInput : rowRangeInput;
+  if (document.activeElement !== input) input.value = formatLineRange(range);
+  input.classList.remove('invalid');
+  updateLineHighlights();
+}
+
+[['col', colRangeInput], ['row', rowRangeInput]].forEach(([axis, input]) => {
+  input.addEventListener('input', () => {
+    const range = parseLineRange(input.value);
+    input.classList.toggle('invalid', range === false);
+    if (range === false) return; // 入力途中の読めない値では今の強調を保つ
+    lineHighlight[axis] = range;
+    updateLineHighlights();
+  });
+  // 入力欄から離れたら、読める値なら「60-80」の形に整える
+  input.addEventListener('blur', () => {
+    if (parseLineRange(input.value) !== false) input.value = formatLineRange(lineHighlight[axis]);
+  });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') input.blur();
+    e.stopPropagation(); // 入力中の文字でツールが切り替わらないようにする
+  });
+});
+
+function clearLineHighlights() {
+  setLineHighlight('col', null);
+  setLineHighlight('row', null);
+}
+document.getElementById('btn-line-clear').addEventListener('click', clearLineHighlights);
+rulerCorner.addEventListener('click', clearLineHighlights);
+
+// ── 定規の描画 ──
+function scheduleRulerDraw() {
+  if (rulerDrawPending) return;
+  rulerDrawPending = true;
+  requestAnimationFrame(() => {
+    rulerDrawPending = false;
+    drawRulers();
+  });
+}
+
+// 定規のキャンバスを表示サイズ×画面の解像度に合わせ、CSSピクセルで描けるようにする
+function prepareRulerCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
+    cv.width = Math.round(w * dpr);
+    cv.height = Math.round(h * dpr);
+  }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h };
+}
+
+function drawRulers() {
+  if (canvasStage.classList.contains('no-rulers')) return;
+  const css = getComputedStyle(document.documentElement);
+  const colors = {
+    text: css.getPropertyValue('--text-muted').trim() || '#888',
+    tick: css.getPropertyValue('--border-strong').trim() || '#ccc',
+    accent: css.getPropertyValue('--accent').trim() || '#333',
+  };
+  const cell = cellPx() * zoom; // 画面上での1マスの大きさ
+  const wrapRect = wrap.getBoundingClientRect();
+  drawRuler(rulerTop, cols, cell, wrapRect.left - rulerTop.getBoundingClientRect().left,
+    lineHighlight.col, rulerHover && rulerHover.col, true, colors);
+  drawRuler(rulerLeft, rows, cell, wrapRect.top - rulerLeft.getBoundingClientRect().top,
+    lineHighlight.row, rulerHover && rulerHover.row, false, colors);
+}
+
+// horizontal: 上の定規（列）ならtrue。offset: 定規の端から見たキャンバスの端の位置
+function drawRuler(cv, count, cell, offset, range, hover, horizontal, colors) {
+  const { ctx, w, h } = prepareRulerCanvas(cv);
+  const length = horizontal ? w : h;
+  const thick = horizontal ? h : w;
+  // 定規の向きに関係なく「長さ方向の位置 pos・幅方向の位置 across」で矩形を塗る
+  const fill = (pos, size, across, depth) => {
+    if (horizontal) ctx.fillRect(pos, across, size, depth);
+    else ctx.fillRect(across, pos, depth, size);
+  };
+
+  // 強調中の範囲とカーソル位置
+  if (range && range.start <= count) {
+    ctx.fillStyle = 'rgba(255, 190, 0, 0.45)';
+    fill(offset + (range.start - 1) * cell, (Math.min(range.end, count) - range.start + 1) * cell, 0, thick);
+  }
+  if (hover != null && hover >= 0 && hover < count) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.10)';
+    fill(offset + hover * cell, Math.max(1, cell), 0, thick);
+  }
+
+  // 数字が重ならない間隔を選ぶ（上は4桁の数字の幅、左は文字の高さが目安）
+  const minGap = horizontal ? 28 : 16;
+  const step = RULER_STEPS.find(s => s * cell >= minGap) || RULER_STEPS[RULER_STEPS.length - 1];
+  // 画面に見えている範囲のマスだけを描く
+  const first = Math.max(0, Math.floor(-offset / cell));
+  const last = Math.min(count - 1, Math.ceil((length - offset) / cell));
+
+  ctx.fillStyle = colors.tick;
+  for (let i = first; i <= last + 1 && i <= count; i++) {
+    const pos = Math.round(offset + i * cell);
+    const labeled = (i + 1) % step === 0 || i === 0; // マスi（0始まり）の左端・上端
+    if (cell >= 4 || labeled) {
+      const depth = labeled ? thick * 0.45 : thick * 0.2;
+      fill(pos, 1, thick - depth, depth);
+    }
+  }
+
+  ctx.fillStyle = colors.text;
+  ctx.font = '9px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let i = first; i <= last; i++) {
+    const n = i + 1;
+    if (n !== 1 && n % step !== 0) continue;
+    const center = offset + (i + 0.5) * cell;
+    if (horizontal) ctx.fillText(String(n), center, h * 0.36);
+    else ctx.fillText(String(n), w * 0.42, center);
+  }
+}
+
+// ── 定規のクリック・ドラッグで強調する ──
+function rulerIndexAt(e, horizontal) {
+  const cell = cellPx() * zoom;
+  const wrapRect = wrap.getBoundingClientRect();
+  const pos = horizontal ? e.clientX - wrapRect.left : e.clientY - wrapRect.top;
+  const count = horizontal ? cols : rows;
+  return Math.max(1, Math.min(count, Math.floor(pos / cell) + 1));
+}
+
+[[rulerTop, 'col', true], [rulerLeft, 'row', false]].forEach(([cv, axis, horizontal]) => {
+  cv.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || !started) return;
+    e.preventDefault();
+    const current = lineHighlight[axis];
+    const at = rulerIndexAt(e, horizontal);
+    // Shift＋クリックは今の強調の端からその位置までを範囲にする
+    const anchor = e.shiftKey && current ? current.start : at;
+    const apply = end => setLineHighlight(axis, { start: Math.min(anchor, end), end: Math.max(anchor, end) });
+    apply(at);
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { /* 捕捉できなくてもクリックは効く */ }
+    const onMove = ev => apply(rulerIndexAt(ev, horizontal));
+    const onUp = () => {
+      cv.removeEventListener('pointermove', onMove);
+      cv.removeEventListener('pointerup', onUp);
+      cv.removeEventListener('pointercancel', onUp);
+    };
+    cv.addEventListener('pointermove', onMove);
+    cv.addEventListener('pointerup', onUp);
+    cv.addEventListener('pointercancel', onUp);
+  });
+});
+
+// カーソルのあるマスを定規に示す
+cOv.addEventListener('mousemove', e => {
+  const { col, row } = getCell(e);
+  if (!rulerHover || rulerHover.col !== col || rulerHover.row !== row) {
+    rulerHover = { col, row };
+    scheduleRulerDraw();
+  }
+});
+cOv.addEventListener('mouseleave', () => {
+  rulerHover = null;
+  scheduleRulerDraw();
+});
+
+// ── 定規の表示切替 ──
+const showRulersCheckbox = document.getElementById('show-rulers');
+function setRulersVisible(visible) {
+  const anchor = canvasScreenPos(); // 定規の出し入れでキャンバスを画面上でずらさない
+  canvasStage.classList.toggle('no-rulers', !visible);
+  showRulersCheckbox.checked = visible;
+  updateScrollPadding();
+  restoreCanvasScreenPos(anchor);
+  scheduleRulerDraw();
+}
+showRulersCheckbox.addEventListener('change', () => {
+  setRulersVisible(showRulersCheckbox.checked);
+  try { localStorage.setItem(SHOW_RULERS_KEY, showRulersCheckbox.checked ? '1' : '0'); } catch (err) { /* 記憶できなくても切り替えはできる */ }
+});
+try {
+  if (localStorage.getItem(SHOW_RULERS_KEY) === '0') {
+    canvasStage.classList.add('no-rulers');
+    showRulersCheckbox.checked = false;
+  }
+} catch (err) { /* 読めなければ表示する */ }
+
+// スクロールや表示領域の大きさが変わったら描き直す
+// （拡大縮小・グリッドサイズの変更はupdateGridOverlayから呼ばれる）
+canvasArea.addEventListener('scroll', scheduleRulerDraw, { passive: true });
+new ResizeObserver(scheduleRulerDraw).observe(canvasArea);
 
 // ── ズーム ────────────────────────────────────────────
 // 大きなグリッドを全体表示できるよう、縮小は10%まで許可する

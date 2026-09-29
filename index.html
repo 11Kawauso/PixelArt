@@ -313,6 +313,25 @@
         <input type="checkbox" id="show-grid" checked style="accent-color:var(--accent)">
         グリッド線を表示
       </label>
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:6px;">
+        <input type="checkbox" id="show-rulers" checked style="accent-color:var(--accent)">
+        定規を表示
+      </label>
+    </div>
+
+    <!-- 定規で強調 -->
+    <div class="panel-section">
+      <div class="panel-label">列・行を強調</div>
+      <div class="line-input-row">
+        <label for="col-range-input">列</label>
+        <input type="text" id="col-range-input" class="line-range-input" inputmode="numeric" placeholder="例：60 / 60-80" autocomplete="off">
+      </div>
+      <div class="line-input-row">
+        <label for="row-range-input">行</label>
+        <input type="text" id="row-range-input" class="line-range-input" inputmode="numeric" placeholder="例：5 / 5-12" autocomplete="off">
+      </div>
+      <button id="btn-line-clear" style="width:100%; margin-top:6px;">強調を解除</button>
+      <div class="layer-hint">左上が (1,1) です。定規をクリック・ドラッグしても選べます</div>
     </div>
 
     </div>
@@ -369,18 +388,24 @@
   <!-- パネル開閉ボタン -->
   <button class="panel-toggle" id="panel-toggle" title="パネルの表示切替">◀</button>
 
-  <!-- キャンバスエリア -->
-  <div class="canvas-area" id="canvas-area">
-    <div class="canvas-scroll-pad">
-      <div id="canvas-wrap">
-        <canvas id="canvas-bg"></canvas>
-        <canvas id="canvas-trace"></canvas>
-        <canvas id="canvas-main"></canvas>
-        <div id="canvas-grid"></div>
-        <canvas id="canvas-overlay"></canvas>
+  <!-- キャンバスエリア（上と左に定規） -->
+  <div class="canvas-stage" id="canvas-stage">
+    <button class="ruler-corner" id="ruler-corner" title="定規の強調表示を解除"></button>
+    <canvas class="ruler ruler-top" id="ruler-top" title="クリックでその列を強調（ドラッグで範囲）"></canvas>
+    <canvas class="ruler ruler-left" id="ruler-left" title="クリックでその行を強調（ドラッグで範囲）"></canvas>
+    <div class="canvas-area" id="canvas-area">
+      <div class="canvas-scroll-pad">
+        <div id="canvas-wrap">
+          <canvas id="canvas-bg"></canvas>
+          <canvas id="canvas-trace"></canvas>
+          <canvas id="canvas-main"></canvas>
+          <div id="canvas-grid"></div>
+          <div class="line-highlight" id="col-highlight" style="display:none"></div>
+          <div class="line-highlight" id="row-highlight" style="display:none"></div>
+          <canvas id="canvas-overlay"></canvas>
+        </div>
       </div>
     </div>
-
   </div>
 </div>
 
