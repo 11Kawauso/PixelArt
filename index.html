@@ -13,6 +13,11 @@
 <header>
   <h1>ドット絵エディタ</h1>
   <span class="artwork-chip" id="artwork-chip" style="display:none" title="開いているクラウド作品">📄 <span id="artwork-chip-name"></span></span>
+  <!-- 描画中のレイヤーと、今のツール（筆の状態） -->
+  <span class="status-chip" id="status-chip" style="display:none">
+    <span class="status-layer" id="status-layer"></span>
+    <span class="status-tool" id="status-tool"></span>
+  </span>
   <div class="header-sep"></div>
   <div class="bg-switcher">
     <button class="bg-btn active" data-bg="#ffffff" title="白" style="background:#ffffff;"></button>

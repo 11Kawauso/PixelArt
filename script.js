@@ -1429,6 +1429,7 @@ function updateLayerPanel() {
     btnLayerLock.textContent = active.locked ? '🔒' : '🔓';
     btnLayerLock.title = active.locked ? 'ロックを解除' : 'レイヤーをロック';
   }
+  updateHeaderStatus();
 }
 
 // レイヤー項目のドラッグ並び替え（上下移動のみ）。
@@ -2112,6 +2113,7 @@ function updateSelectionButtons() {
   const ctx = cOv.getContext('2d');
   ctx.clearRect(0, 0, cOv.width, cOv.height);
   drawSelectionOverlay(ctx);
+  updateHeaderStatus();
 }
 
 btnRangeRect.addEventListener('click', () => {
@@ -2538,6 +2540,7 @@ document.querySelectorAll('.style-btn').forEach(b => {
   b.addEventListener('click', () => {
     drawStyle = b.dataset.style;
     document.querySelectorAll('.style-btn').forEach(x => x.classList.toggle('active', x.dataset.style === drawStyle));
+    updateHeaderStatus();
     updateDetectLineVisibility();
   });
 });
@@ -2556,6 +2559,7 @@ const brushVal = document.getElementById('brush-val');
 brushSlider.addEventListener('input', () => {
   brushSize = parseInt(brushSlider.value);
   brushVal.textContent = brushSize;
+  updateHeaderStatus();
 });
 
 // ── ツール選択 ────────────────────────────────────────
@@ -2567,6 +2571,47 @@ function setTool(t) {
   updateDrawStyleVisibility();
   updateShapeMenuUI();
   updateCanvasCursor();
+  updateHeaderStatus();
+}
+
+// ── ヘッダーの状態表示（描画中のレイヤーと今のツール） ──
+// ツール・選択モード・図形・ブラシサイズ・レイヤーが変わるたびに呼ぶ。
+const statusChip = document.getElementById('status-chip');
+const statusLayer = document.getElementById('status-layer');
+const statusTool = document.getElementById('status-tool');
+const TOOL_LABELS = {
+  pen: '✏️ ペン', fill: '🪣 塗り潰し', erase: '🧹 消しゴム', pick: '💉 スポイト', move: '✥ 移動',
+};
+const DRAW_STYLE_LABELS = { col: '縦', row: '横' };
+
+// 今キャンバスをクリックしたときに起きることを文字にする
+function currentToolLabel() {
+  // 選択ボタンを押した直後は、ツールより選択が優先される
+  if (selectionMode === 'range') return `📐 範囲選択（${rangeSelectMode === 'free' ? '自分で指定' : '四角で囲う'}）`;
+  if (selectionMode === 'color') return '🎨 色で選択';
+  if (selectionMode === 'flood') return '💧 隣接色で選択';
+  if (currentTool === 'shape') {
+    const opt = document.querySelector(`.shape-opt[data-shape="${shapeType}"][data-fill="${shapeFill ? 1 : 0}"]`);
+    return opt ? opt.textContent.trim() : '図形';
+  }
+  let label = TOOL_LABELS[currentTool] || currentTool;
+  const details = [];
+  if (currentTool === 'pen' && DRAW_STYLE_LABELS[drawStyle]) details.push(DRAW_STYLE_LABELS[drawStyle]);
+  if ((currentTool === 'pen' || currentTool === 'erase') && brushSize > 1) details.push(`サイズ${brushSize}`);
+  if (details.length) label += `（${details.join('・')}）`;
+  return label;
+}
+
+function updateHeaderStatus() {
+  statusChip.style.display = started ? '' : 'none';
+  const layer = layers[activeLayerIndex];
+  if (!layer) return;
+  const marks = (layer.locked ? '🔒' : '') + (layer.visible ? '' : '（非表示）');
+  statusLayer.textContent = `🗂 ${layer.name}${marks}`;
+  statusLayer.title = `描画中のレイヤー: ${layer.name}${layer.locked ? '（ロック中）' : ''}${layer.visible ? '' : '（非表示）'}`;
+  const tool = currentToolLabel();
+  statusTool.textContent = tool;
+  statusTool.title = `今のツール: ${tool}`;
 }
 
 function updateCanvasCursor() {
@@ -2634,6 +2679,7 @@ document.querySelectorAll('.shape-opt[data-shape]').forEach(b => {
     document.querySelectorAll('.tool-btn').forEach(x => x.classList.remove('active'));
     updateDrawStyleVisibility();
     updateCanvasCursor();
+    updateHeaderStatus();
     updateShapeMenuUI();
     closeShapeMenu();
   });

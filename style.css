@@ -1439,6 +1439,45 @@ input, select, textarea {
   max-width: 200px;
   white-space: nowrap;
 }
+/* 描画中のレイヤーと今のツール。幅が足りないときは他のボタンを押し出さずに「…」で縮む */
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.status-chip > span {
+  padding: 3px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.status-layer {
+  flex: 0 1 auto;
+  max-width: 160px;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+}
+.status-tool { flex: 0 1 auto; color: var(--text); }
+/* スマホではヘッダーに入りきらないので、ヘッダーの下（左上）に浮かべて表示する。
+   右上には参考画像・図形ボタン（計約100px）があるので、その手前までの幅にする。 */
+@media (max-width: 640px) {
+  .status-chip {
+    position: fixed;
+    top: 48px;
+    left: 8px;
+    z-index: 60;
+    max-width: calc(100vw - 124px);
+    background: var(--surface);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .status-layer { max-width: 50%; }
+}
 .artwork-chip #artwork-chip-name {
   overflow: hidden;
   text-overflow: ellipsis;
