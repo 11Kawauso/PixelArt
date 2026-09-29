@@ -2855,53 +2855,119 @@ document.addEventListener('click', e => {
   if (!fileMenu.contains(e.target)) closeFileMenu();
 });
 
-// ── ダウンロード ──────────────────────────────────────
-document.getElementById('btn-download').addEventListener('click', () => {
-  closeFileMenu();
-  const out = document.createElement('canvas');
-  const px = Math.max(1, Math.round(512 / Math.max(cols, rows)));
-  out.width  = cols * px;
-  out.height = rows * px;
-  const ctx = out.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, out.width, out.height);
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const color = compositeAt(r, c);
-      if (color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(c * px, r * px, px, px);
-      }
-    }
-  }
-  const a = document.createElement('a');
-  a.download = 'pixel-art.png';
-  a.href = out.toDataURL('image/png');
-  a.click();
-  markProjectSaved();
-});
+// ── ダウンロード（PNG保存） ───────────────────────────
+// 保存時に倍率を選ぶ。×1は1ドット＝1ピクセルで、ゲーム素材などにそのまま使える。
+// ドット絵を半端な倍率で拡大するとドットの大きさが不ぞろいになったりぼやけたりするため、
+// 倍率は整数に限る。選んだ倍率はこのブラウザに記憶する。
+const PNG_SCALES = [1, 2, 4, 8, 16, 32];
+const PNG_SCALE_KEY = 'pixelart-png-scale';
+// 端末によっては大きすぎる画像を作れない（iPhoneのSafariは面積の上限が特に小さい）ため、
+// どの端末でも作れる大きさまでに制限する
+const PNG_MAX_SIDE = 8192;
+const PNG_MAX_AREA = 4096 * 4096;
+const pngExportModal = document.getElementById('png-export-modal');
+const pngScaleGrid = document.getElementById('png-scale-grid');
+let pngExportTransparent = false;
+let pngExportScale = 1;
 
-document.getElementById('btn-download-transparent').addEventListener('click', () => {
-  closeFileMenu();
-  const out = document.createElement('canvas');
-  const px = Math.max(1, Math.round(512 / Math.max(cols, rows)));
-  out.width  = cols * px;
-  out.height = rows * px;
-  const ctx = out.getContext('2d');
+// 合成後の絵を1ドット＝1ピクセルで描いたキャンバスを作る
+function compositeCanvas() {
+  const cv = document.createElement('canvas');
+  cv.width = cols;
+  cv.height = rows;
+  const ctx = cv.getContext('2d');
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const color = compositeAt(r, c);
       if (color) {
         ctx.fillStyle = color;
-        ctx.fillRect(c * px, r * px, px, px);
+        ctx.fillRect(c, r, 1, 1);
       }
     }
   }
-  const a = document.createElement('a');
-  a.download = 'pixel-art-transparent.png';
-  a.href = out.toDataURL('image/png');
-  a.click();
-  markProjectSaved();
+  return cv;
+}
+
+function pngScaleAllowed(scale) {
+  const w = cols * scale, h = rows * scale;
+  return w <= PNG_MAX_SIDE && h <= PNG_MAX_SIDE && w * h <= PNG_MAX_AREA;
+}
+
+// 前回選んだ倍率。初めてのときは、これまでの保存サイズ（約512px）に近い倍率にする
+function initialPngScale() {
+  let saved = NaN;
+  try { saved = parseInt(localStorage.getItem(PNG_SCALE_KEY), 10); } catch (err) { /* 読めなければ既定値 */ }
+  const wanted = PNG_SCALES.includes(saved)
+    ? saved
+    : PNG_SCALES.reduce((best, s) =>
+        Math.abs(Math.max(cols, rows) * s - 512) < Math.abs(Math.max(cols, rows) * best - 512) ? s : best);
+  // 今のキャンバスでは大きすぎる場合は、作れる中で一番近い倍率にする
+  return [...PNG_SCALES].reverse().find(s => s <= wanted && pngScaleAllowed(s)) || 1;
+}
+
+function buildPngScaleButtons() {
+  pngScaleGrid.innerHTML = '';
+  PNG_SCALES.forEach(scale => {
+    const b = document.createElement('button');
+    const allowed = pngScaleAllowed(scale);
+    b.className = scale === pngExportScale ? 'active' : '';
+    b.disabled = !allowed;
+    b.title = allowed ? '' : 'この端末では作れない大きさのため選べません';
+    b.textContent = `×${scale}`;
+    const size = document.createElement('span');
+    size.textContent = `${cols * scale}×${rows * scale}px`;
+    b.appendChild(size);
+    b.addEventListener('click', () => {
+      pngExportScale = scale;
+      buildPngScaleButtons();
+    });
+    pngScaleGrid.appendChild(b);
+  });
+}
+
+function openPngExport(transparent) {
+  closeFileMenu();
+  if (!started) return;
+  pngExportTransparent = transparent;
+  pngExportScale = initialPngScale();
+  document.getElementById('png-export-title').textContent = transparent ? 'PNG保存（背景を透明にする）' : 'PNG保存（背景は白）';
+  buildPngScaleButtons();
+  pngExportModal.style.display = 'flex';
+}
+
+function exportPng() {
+  pngExportModal.style.display = 'none';
+  const scale = pngExportScale;
+  try { localStorage.setItem(PNG_SCALE_KEY, String(scale)); } catch (err) { /* 記憶できなくても保存はできる */ }
+  const out = document.createElement('canvas');
+  out.width = cols * scale;
+  out.height = rows * scale;
+  const ctx = out.getContext('2d');
+  if (!pngExportTransparent) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+  }
+  // 等倍の絵を、ぼかさずに（ドットのまま）拡大して描き写す
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(compositeCanvas(), 0, 0, out.width, out.height);
+  const name = `pixel-art${pngExportTransparent ? '-transparent' : ''}_${out.width}x${out.height}.png`;
+  out.toBlob(blob => {
+    if (!blob) return; // 作れなかった（メモリ不足など）
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.download = name;
+    a.href = url;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    markProjectSaved();
+  }, 'image/png');
+}
+
+document.getElementById('btn-download').addEventListener('click', () => openPngExport(false));
+document.getElementById('btn-download-transparent').addEventListener('click', () => openPngExport(true));
+document.getElementById('btn-png-export-ok').addEventListener('click', exportPng);
+document.getElementById('btn-png-export-cancel').addEventListener('click', () => {
+  pngExportModal.style.display = 'none';
 });
 
 // ── 画像変換 ──────────────────────────────────────────
@@ -3548,20 +3614,7 @@ function loadProjectData(p) {
 
 // ギャラリー一覧用のサムネイル（合成後の絵の等倍PNG）
 function projectThumbnailDataURL() {
-  const cv = document.createElement('canvas');
-  cv.width = cols;
-  cv.height = rows;
-  const ctx = cv.getContext('2d');
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const color = compositeAt(r, c);
-      if (color) {
-        ctx.fillStyle = color;
-        ctx.fillRect(c, r, 1, 1);
-      }
-    }
-  }
-  return cv.toDataURL('image/png');
+  return compositeCanvas().toDataURL('image/png');
 }
 
 function isEditorStarted() {

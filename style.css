@@ -453,6 +453,34 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
 }
 .confirm-actions { display: flex; gap: 8px; justify-content: center; }
 
+/* PNG保存の倍率ボタン（倍率＋保存される大きさの2行） */
+.png-export-card { max-width: calc(100vw - 32px); }
+.png-scale-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.png-scale-grid button {
+  height: auto;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.png-scale-grid button span {
+  font-size: 9px;
+  font-weight: normal;
+  opacity: 0.75;
+}
+.png-scale-grid button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.png-export-hint { margin: 0 0 14px; text-align: center; }
+
 /* パレット書き出しの形式ボタン（拡張子＋対応ソフトの2行） */
 .palette-export-options {
   display: grid;

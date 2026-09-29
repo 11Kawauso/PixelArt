@@ -463,6 +463,19 @@
 </div>
 
 <!-- 新規キャンバス確認モーダル -->
+<!-- PNG保存の倍率選択モーダル -->
+<div class="confirm-modal" id="png-export-modal" style="display:none">
+  <div class="confirm-card png-export-card">
+    <p id="png-export-title">PNG保存</p>
+    <div class="png-scale-grid" id="png-scale-grid"></div>
+    <div class="layer-hint png-export-hint">ゲーム素材には ×1（1ドット＝1ピクセル）がおすすめです</div>
+    <div class="confirm-actions">
+      <button id="btn-png-export-ok" class="primary">保存</button>
+      <button id="btn-png-export-cancel">キャンセル</button>
+    </div>
+  </div>
+</div>
+
 <div class="confirm-modal" id="new-canvas-confirm-modal" style="display:none">
   <div class="confirm-card">
     <p>新規キャンバスを作成しますか？<br>現在の内容は失われます</p>
