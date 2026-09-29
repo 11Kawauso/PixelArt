@@ -1439,6 +1439,42 @@ input, select, textarea {
   max-width: 200px;
   white-space: nowrap;
 }
+/* 絵の確認モード（Dキー・👁ボタンを押している間）：描いた絵以外をすべて隠す。
+   display:noneではなくvisibility:hiddenにして、レイアウト（絵の位置）を動かさない。 */
+body.art-preview header,
+body.art-preview .panel,
+body.art-preview .panel-toggle,
+body.art-preview .panel-resize,
+body.art-preview .layer-dock,
+body.art-preview .statusbar,
+body.art-preview .shape-menu,
+body.art-preview .ref-toggle,
+body.art-preview .ref-window,
+body.art-preview .color-history,
+body.art-preview .color-history *, /* 色の丸は個別にvisibilityを指定しているので、それごと隠す */
+body.art-preview .zoom-controls,
+body.art-preview .status-chip,
+body.art-preview .ruler,
+body.art-preview .ruler-corner,
+body.art-preview #canvas-bg,
+body.art-preview #canvas-trace,
+body.art-preview #canvas-grid,
+body.art-preview #canvas-overlay,
+body.art-preview .line-highlight {
+  visibility: hidden !important;
+}
+body.art-preview #canvas-wrap { box-shadow: none; }
+body.art-preview .canvas-area { scrollbar-width: none; }
+body.art-preview .canvas-area::-webkit-scrollbar { display: none; }
+/* 押している👁ボタンだけは残す（離したことが分かるように） */
+body.art-preview #btn-art-preview { visibility: visible !important; }
+#btn-art-preview.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+#btn-art-preview { touch-action: none; }
+
 /* 描画中のレイヤーと今のツール。幅が足りないときは他のボタンを押し出さずに「…」で縮む */
 .status-chip {
   display: inline-flex;

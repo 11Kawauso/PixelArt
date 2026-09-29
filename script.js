@@ -2649,6 +2649,43 @@ document.addEventListener('keydown', e => {
   setTool(tool);
 });
 
+// ── 絵の確認モード ────────────────────────────────────
+// Dキー（または右下の👁ボタン）を押している間だけ、描いた絵以外
+// （市松模様の背景・グリッド・定規・選択表示・トレース・パネルやボタン類）を隠す。
+// 背景はヘッダーで選んだ色のままなので、白・灰・黒それぞれの上での見え方を確かめられる。
+const btnArtPreview = document.getElementById('btn-art-preview');
+
+function setArtPreview(on) {
+  if (on && !started) return;
+  document.body.classList.toggle('art-preview', on);
+  btnArtPreview.classList.toggle('active', on);
+  // ヘッダーやステータスバーを隠した跡も、キャンバスの背景色で埋める
+  document.body.style.background = on ? getComputedStyle(canvasArea).backgroundColor : '';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code !== 'KeyD' || e.repeat) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+  if (isTypingTarget(e.target)) return;
+  e.preventDefault();
+  setArtPreview(true);
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'KeyD') setArtPreview(false);
+});
+// キーを押したまま別のウィンドウに移ると離した通知が来ないため、その時点で戻す
+window.addEventListener('blur', () => setArtPreview(false));
+
+btnArtPreview.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  try { btnArtPreview.setPointerCapture(e.pointerId); } catch (err) { /* 捕捉できなくても押している間は効く */ }
+  setArtPreview(true);
+});
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(type => {
+  btnArtPreview.addEventListener(type, () => setArtPreview(false));
+});
+btnArtPreview.addEventListener('contextmenu', e => e.preventDefault()); // スマホの長押しメニューを出さない
+
 // ── テンプレート図形メニュー ──────────────────────────
 const shapeMenu = document.getElementById('shape-menu');
 const shapeMenuBtn = document.getElementById('btn-shape-menu');
