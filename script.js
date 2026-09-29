@@ -2744,6 +2744,8 @@ const rowRangeInput = document.getElementById('row-range-input');
 const SHOW_RULERS_KEY = 'pixelart-show-rulers';
 // 数字の間隔の候補（マス数）。数字どうしが重ならない一番細かいものを使う
 const RULER_STEPS = [1, 2, 5, 10, 20, 50, 100, 200, 500];
+const RULER_W = 28; // 左の定規の幅（4桁の数字が入る）
+const RULER_H = 18; // 上の定規の高さ
 
 // 強調中の範囲（1始まり、両端を含む）。nullなら強調なし
 const lineHighlight = { col: null, row: null };
@@ -2853,11 +2855,57 @@ function drawRulers() {
     accent: css.getPropertyValue('--accent').trim() || '#333',
   };
   const cell = cellPx() * zoom; // 画面上での1マスの大きさ
-  const wrapRect = wrap.getBoundingClientRect();
-  drawRuler(rulerTop, cols, cell, wrapRect.left - rulerTop.getBoundingClientRect().left,
-    lineHighlight.col, rulerHover && rulerHover.col, true, colors);
-  drawRuler(rulerLeft, rows, cell, wrapRect.top - rulerLeft.getBoundingClientRect().top,
-    lineHighlight.row, rulerHover && rulerHover.row, false, colors);
+  const layout = layoutRulers();
+  if (layout.top) {
+    drawRuler(rulerTop, cols, cell, layout.top.offset,
+      lineHighlight.col, rulerHover && rulerHover.col, true, colors);
+  }
+  if (layout.left) {
+    drawRuler(rulerLeft, rows, cell, layout.left.offset,
+      lineHighlight.row, rulerHover && rulerHover.row, false, colors);
+  }
+}
+
+// 定規をキャンバスの上辺・左辺に付けて置く。キャンバスの端が見えている範囲の外に
+// 出たときは、見えている範囲の端で止めて見え続けるようにする。
+// 戻り値のoffsetは、定規の端から見たキャンバスの端の位置（描画に使う）。
+function layoutRulers() {
+  const stage = canvasStage.getBoundingClientRect();
+  const areaRect = canvasArea.getBoundingClientRect();
+  // スクロールバーを除いた、実際に見えている範囲
+  const aL = areaRect.left + canvasArea.clientLeft, aT = areaRect.top + canvasArea.clientTop;
+  const aR = aL + canvasArea.clientWidth, aB = aT + canvasArea.clientHeight;
+  const w = wrap.getBoundingClientRect();
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const place = (el, x, y, width, height) => {
+    Object.assign(el.style, {
+      display: 'block',
+      left: (x - stage.left) + 'px', top: (y - stage.top) + 'px',
+      width: width + 'px', height: height + 'px',
+    });
+  };
+  const hide = el => { el.style.display = 'none'; };
+
+  const topY = clamp(w.top - RULER_H, aT, aB - RULER_H);
+  const leftX = clamp(w.left - RULER_W, aL, aR - RULER_W);
+  // キャンバスが見えている範囲（縦横どちらかでも見えていなければ定規も出さない）
+  const visX1 = Math.max(w.left, aL), visX2 = Math.min(w.right, aR);
+  const visY1 = Math.max(w.top, aT), visY2 = Math.min(w.bottom, aB);
+  const visible = visX2 > visX1 && visY2 > visY1;
+
+  const result = { top: null, left: null };
+  if (visible) {
+    place(rulerTop, visX1, topY, visX2 - visX1, RULER_H);
+    place(rulerLeft, leftX, visY1, RULER_W, visY2 - visY1);
+    place(rulerCorner, leftX, topY, RULER_W, RULER_H);
+    result.top = { offset: w.left - visX1 };
+    result.left = { offset: w.top - visY1 };
+  } else {
+    hide(rulerTop);
+    hide(rulerLeft);
+    hide(rulerCorner);
+  }
+  return result;
 }
 
 // horizontal: 上の定規（列）ならtrue。offset: 定規の端から見たキャンバスの端の位置
@@ -2902,9 +2950,11 @@ function drawRuler(cv, count, cell, offset, range, hover, horizontal, colors) {
   ctx.font = '9px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  // 1番は常に出したいが、次の数字（stepの倍数）と近すぎて重なるときは省く
+  const showOne = step === 1 || (step - 1) * cell >= minGap;
   for (let i = first; i <= last; i++) {
     const n = i + 1;
-    if (n !== 1 && n % step !== 0) continue;
+    if (n === 1 ? !showOne : n % step !== 0) continue;
     const center = offset + (i + 0.5) * cell;
     if (horizontal) ctx.fillText(String(n), center, h * 0.36);
     else ctx.fillText(String(n), w * 0.42, center);
@@ -2959,11 +3009,8 @@ cOv.addEventListener('mouseleave', () => {
 // ── 定規の表示切替 ──
 const showRulersCheckbox = document.getElementById('show-rulers');
 function setRulersVisible(visible) {
-  const anchor = canvasScreenPos(); // 定規の出し入れでキャンバスを画面上でずらさない
   canvasStage.classList.toggle('no-rulers', !visible);
   showRulersCheckbox.checked = visible;
-  updateScrollPadding();
-  restoreCanvasScreenPos(anchor);
   scheduleRulerDraw();
 }
 showRulersCheckbox.addEventListener('change', () => {
@@ -2979,7 +3026,8 @@ try {
 
 // スクロールや表示領域の大きさが変わったら描き直す
 // （拡大縮小・グリッドサイズの変更はupdateGridOverlayから呼ばれる）
-canvasArea.addEventListener('scroll', scheduleRulerDraw, { passive: true });
+// スクロール中はキャンバスに遅れず付いていくよう、待たずにその場で描き直す
+canvasArea.addEventListener('scroll', () => drawRulers(), { passive: true });
 new ResizeObserver(scheduleRulerDraw).observe(canvasArea);
 
 // ── ズーム ────────────────────────────────────────────
