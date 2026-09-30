@@ -3214,9 +3214,7 @@ document.getElementById('btn-zoom-out').addEventListener('click', () => setZoom(
 // パソコンのタッチパッドのピンチもCtrl付きのホイールとして届くので、ここで扱う。
 // 定規の上でも効くよう、定規を含むキャンバス全体（canvas-stage）で受け取る。
 document.getElementById('canvas-stage').addEventListener('wheel', e => {
-  // テトリス中はキャンバスに描かないので、地図アプリのようにホイールを常に拡大縮小にする
-  const zoomGesture = e.ctrlKey || e.metaKey || document.body.classList.contains('tetris-playing');
-  if (!zoomGesture) {
+  if (!e.ctrlKey && !e.metaKey) {
     // 定規はスクロールしない要素なので、上での2本指スクロールやホイールをキャンバスに回す
     if (e.target.closest('.ruler, .ruler-corner')) {
       e.preventDefault();

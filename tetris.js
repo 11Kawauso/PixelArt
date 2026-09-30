@@ -200,7 +200,6 @@
       return;
     }
     g.dirty = true;
-    followPiece();
   }
 
   function nextTurn() {
@@ -216,7 +215,6 @@
       g.lockResets++;
     }
     g.dirty = true;
-    followPiece();
   }
 
   function tryMove(dx, dy) {
@@ -249,10 +247,9 @@
     return y;
   }
 
+  // 得点は横一列が揃ったときだけ入る（落とし方では点を付けない）
   function hardDrop() {
-    const y = ghostY();
-    g.score += (y - g.cur.y) * 2;
-    g.cur.y = y;
+    g.cur.y = ghostY();
     lockPiece();
   }
 
@@ -386,30 +383,6 @@
     return { left, top: a.top, right: a.right, bottom: a.bottom };
   }
 
-  // 大きな盤面では落下中のブロックが画面外に出てしまうので、端に近づいたらスクロールする。
-  // 少しずつ追いかけると落ちる先が見えないため、横は中央、縦は上から1/3の位置まで一度に動かす。
-  function followPiece() {
-    const c = g && g.cur;
-    if (!c) return;
-    const { left, top, right, bottom } = playArea();
-    const wr = wrap.getBoundingClientRect();
-    const cw = wr.width / g.w, ch = wr.height / g.h;
-    const cells = SHAPES[c.type][c.rot];
-    const xs = cells.map(p => c.x + p[0]), ys = cells.map(p => Math.max(0, c.y + p[1]));
-    const pl = wr.left + Math.min(...xs) * cw, pr = wr.left + (Math.max(...xs) + 1) * cw;
-    const pt = wr.top + Math.min(...ys) * ch, pb = wr.top + (Math.max(...ys) + 1) * ch;
-    const mx = Math.min(60, (right - left) / 4), my = Math.min(60, (bottom - top) / 4);
-    // 盤面がその向きに丸ごと見えているなら動かさない（小さな盤面が勝手にずれないように）
-    const fitsX = wr.left >= left && wr.right <= right;
-    const fitsY = wr.top >= top && wr.bottom <= bottom;
-    if (!fitsX && (pl < left + mx || pr > right - mx)) {
-      canvasArea.scrollLeft += (pl + pr) / 2 - (left + right) / 2;
-    }
-    if (!fitsY && (pt < top + my || pb > bottom - my)) {
-      canvasArea.scrollTop += (pt + pb) / 2 - (top + (bottom - top) / 3);
-    }
-  }
-
   // ── キャンバスの配置 ──
   function canvasCenter() {
     const r = wrap.getBoundingClientRect();
@@ -507,9 +480,7 @@
       if (now - g.lastFall >= interval) {
         c.y++;
         g.lastFall = now;
-        if (g.held.down) { g.score++; updateHud(); }
         g.dirty = true;
-        followPiece();
       }
     }
 
@@ -601,8 +572,9 @@
     b.addEventListener('contextmenu', e => e.preventDefault());
   });
 
-  // テトリス中のキャンバスはマウスのドラッグで移動する（ホイールの拡大縮小は script.js 側。
-  // タッチの1本指スクロール・2本指ピンチは、エディタと同じ仕組みがそのまま効く）
+  // テトリス中のキャンバスは、落下中のブロックとは関係なく自由に動かせる。
+  // マウスのドラッグでの移動はここで扱う。ホイール・タッチパッドのスクロール、
+  // Ctrl+ホイール・ピンチでの拡大縮小、タッチの1本指スクロールはエディタと同じ仕組みがそのまま効く
   let panDrag = null;
   canvasArea.addEventListener('pointerdown', e => {
     if (!g || e.pointerType !== 'mouse' || e.button !== 0) return;
