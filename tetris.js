@@ -2,8 +2,13 @@
 // 今のキャンバスサイズがそのまま盤面になるネタ機能。
 // サイズは自由に変えられるので、やろうと思えば横1000マス以上のテトリスもできる。
 // ブロックの色はカスタムカラーに色があればその中から選び、無ければランダムな色にする。
-// script.js のグローバル（cols, rows, layers, customColors, wrap, canvasArea など）を
+// script.js のグローバル（cols, rows, layers, customColors, wrap, canvasArea, setZoom など）を
 // 使うため、script.js の後に読み込むこと。
+//
+// 画面の流れ：
+//   開始 … キャンバス以外がかくかくと画面外へ消える → キャンバスが右へ寄り、
+//          左からサイドパネルが出てくる → READY / GO! で開始
+//   終了 … サイドパネルが引っ込み、キャンバスが元の位置へ戻る → ほかの部品が戻ってくる
 (() => {
   // 各ブロックの形（n×nの枠の中のマス座標[x, y]）。回転はこの枠の中で行う
   const PIECES = {
@@ -15,11 +20,33 @@
     J: { n: 3, cells: [[0, 0], [0, 1], [1, 1], [2, 1]] },
     L: { n: 3, cells: [[2, 0], [0, 1], [1, 1], [2, 1]] },
   };
-  const TYPES = Object.keys(PIECES);
+
+  // 図（#がブロック）から形を作る。回転の中心がずれないよう、正方形の枠の中央に置く
+  function fromPattern(lines) {
+    const h = lines.length, w = Math.max(...lines.map(l => l.length));
+    const n = Math.max(w, h);
+    const ox = Math.floor((n - w) / 2), oy = Math.floor((n - h) / 2);
+    const cells = [];
+    lines.forEach((line, y) => [...line].forEach((ch, x) => { if (ch === '#') cells.push([x + ox, y + oy]); }));
+    return { n, cells };
+  }
+
+  // 100×100以上の盤面でだけ出てくる特殊ブロック
+  const EXTRA_MIN_SIZE = 100;
+  const EXTRA_PIECES = {
+    PLUS: fromPattern(['.#.', '###', '.#.']),
+    U: fromPattern(['#.#', '###']),
+    BIG: fromPattern(['###', '###', '###']),
+    LONG: fromPattern(['########']),
+    HEART: fromPattern(['##.##', '#####', '#####', '.###.', '..#..']),
+  };
+  const BASE_TYPES = Object.keys(PIECES);
+  const EXTRA_TYPES = Object.keys(EXTRA_PIECES);
+  const ALL_PIECES = { ...PIECES, ...EXTRA_PIECES };
+
   // 4方向ぶんの形を先に作っておく（右回転：(x, y) → (n-1-y, x)）
   const SHAPES = {};
-  TYPES.forEach(t => {
-    const { n, cells } = PIECES[t];
+  Object.entries(ALL_PIECES).forEach(([t, { n, cells }]) => {
     const rots = [cells];
     for (let i = 1; i < 4; i++) rots.push(rots[i - 1].map(([x, y]) => [n - 1 - y, x]));
     SHAPES[t] = rots;
@@ -32,14 +59,16 @@
   const SOFT_DROP_INTERVAL = 16;
   const LOCK_DELAY = 500;      // 着地してから固定されるまでの猶予
   const MAX_LOCK_RESETS = 15;  // 着地後に動かして猶予を延ばせる回数
+  const FLASH_MS = 260;        // 揃った行が光ってから消えるまで
   const LINE_SCORES = [0, 100, 300, 500, 800];
-  const LINE_NAMES = ['', 'シングル', 'ダブル', 'トリプル', 'テトリス！'];
+  const LINE_NAMES = ['', 'SINGLE', 'DOUBLE', 'TRIPLE', 'TETRIS!'];
 
-  const startModal = document.getElementById('tetris-start-modal');
-  const startSize = document.getElementById('tetris-start-size');
-  const startNote = document.getElementById('tetris-start-note');
-  const useArtCheck = document.getElementById('tetris-use-art');
-  const hud = document.getElementById('tetris-hud');
+  // 画面の出入りの演出（CSSのアニメーション時間と合わせる）
+  const UI_OUT_MS = 1200;      // エディタの部品が消える／戻る
+  const SIDE_MS = 1000;        // サイドパネルが出る／引っ込む
+  const MOVE_STEPS = 6;        // キャンバスの移動も、かくかくと6段階で動かす
+
+  const side = document.getElementById('tetris-side');
   const pad = document.getElementById('tetris-pad');
   const elSize = document.getElementById('tetris-size');
   const elScore = document.getElementById('tetris-score');
@@ -47,22 +76,23 @@
   const elLevel = document.getElementById('tetris-level');
   const elMsg = document.getElementById('tetris-msg');
   const elNote = document.getElementById('tetris-note');
+  const colorsBox = document.getElementById('tetris-colors-box');
+  const colorsEl = document.getElementById('tetris-colors');
   const nextCanvas = document.getElementById('tetris-next');
   const holdCanvas = document.getElementById('tetris-hold');
   const panel = document.getElementById('tetris-panel');
   const panelTitle = document.getElementById('tetris-panel-title');
   const btnPause = document.getElementById('btn-tetris-pause');
   const btnResume = document.getElementById('btn-tetris-resume');
-  const btnRetry = document.getElementById('btn-tetris-retry');
   const btnKeep = document.getElementById('btn-tetris-keep');
 
-  let g = null; // 遊んでいる間のゲーム状態。遊んでいないときはnull
+  // 遊んでいる間のゲーム状態。遊んでいないときはnull。
+  // state: 'intro'（画面切り替え中）| 'playing' | 'paused' | 'over' | 'outro'（終了演出中）
+  let g = null;
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // ── 色 ──
-  function paletteColors() {
-    return customColors.filter(Boolean);
-  }
-
   function randomHex() {
     // 真っ白・真っ黒に近い色だと背景に紛れて見えないので、明るさと鮮やかさは程々にする
     const h = Math.random() * 360;
@@ -83,10 +113,10 @@
     return { hex, u32 };
   }
 
-  // 7種類を1巡ずつシャッフルして出す（同じ形ばかり続かないように）
+  // 形を1巡ずつシャッフルして出す（同じ形ばかり続かないように）
   function nextPiece() {
     if (!g.bag.length) {
-      g.bag = [...TYPES];
+      g.bag = g.extras ? [...BASE_TYPES, ...EXTRA_TYPES] : [...BASE_TYPES];
       for (let i = g.bag.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [g.bag[i], g.bag[j]] = [g.bag[j], g.bag[i]];
@@ -106,12 +136,13 @@
   }
 
   function spawn(piece) {
-    const n = PIECES[piece.type].n;
+    const n = ALL_PIECES[piece.type].n;
+    const cells = SHAPES[piece.type][0];
     g.cur = {
       ...piece,
       rot: 0,
       x: Math.floor((g.w - n) / 2),
-      y: piece.type === 'I' ? -1 : 0, // Iは枠の2段目にあるので、1段上げて最上段に出す
+      y: -Math.min(...cells.map(p => p[1])), // 枠の上の空き段を詰めて、最上段に出す
     };
     g.lockAt = null;
     g.lockResets = 0;
@@ -122,6 +153,13 @@
     }
     g.dirty = true;
     followPiece();
+  }
+
+  function nextTurn() {
+    g.holdUsed = false;
+    spawn(g.next);
+    g.next = nextPiece();
+    updateHud();
   }
 
   // 着地中に動かせたら、固定までの猶予を延ばす
@@ -145,7 +183,6 @@
 
   function rotate(dir) {
     const c = g.cur;
-    if (c.type === 'O') return;
     const rot = (c.rot + dir + 4) % 4;
     for (const [kx, ky] of KICKS) {
       if (!collides(c.type, rot, c.x + kx, c.y + ky)) {
@@ -177,9 +214,9 @@
     const { type, color } = g.cur;
     const held = g.hold;
     g.hold = { type, color };
-    g.holdUsed = true;
     if (held) spawn(held);
     else { spawn(g.next); g.next = nextPiece(); }
+    g.holdUsed = true;
     updateHud();
   }
 
@@ -196,20 +233,20 @@
       fctx.fillRect(cx, cy, 1, 1);
     }
     g.cur = null;
-    clearLines();
     if (lockedOut) { gameOver(); return; }
-    g.holdUsed = false;
-    spawn(g.next);
-    g.next = nextPiece();
-    updateHud();
+    const full = [];
+    for (let r = 0; r < g.h; r++) if (g.rowFill[r] === g.w) full.push(r);
+    if (full.length) {
+      // すぐには消さず、少しだけ光らせてから消す（ループ側で処理する）
+      g.clearing = { rows: full, start: performance.now() };
+      return;
+    }
+    nextTurn();
   }
 
   // 揃った行を消し、上の行を詰めて落とす
-  function clearLines() {
+  function clearLines(cleared) {
     const { w, h, field, rowFill } = g;
-    let cleared = 0;
-    for (let r = 0; r < h; r++) if (rowFill[r] === w) cleared++;
-    if (!cleared) return;
     let dst = h - 1;
     for (let r = h - 1; r >= 0; r--) {
       if (rowFill[r] === w) continue;
@@ -223,10 +260,10 @@
     rowFill.fill(0, 0, dst + 1);
     g.fieldCtx.putImageData(g.fieldImg, 0, 0);
 
-    const level = currentLevel();
-    g.score += LINE_SCORES[Math.min(cleared, 4)] * level;
+    const n = Math.min(cleared, 4);
+    g.score += LINE_SCORES[n] * currentLevel();
     g.lines += cleared;
-    showMessage(LINE_NAMES[Math.min(cleared, 4)]);
+    showMessage(LINE_NAMES[n]);
   }
 
   function currentLevel() {
@@ -252,16 +289,28 @@
     for (const [dx, dy] of cells) if (c.y + dy >= 0) ctx.fillRect(c.x + dx, c.y + dy, 1, 1);
   }
 
-  // ネクスト・ホールドの小さな表示（8×8ピクセルに1マス2ピクセルで中央寄せ）
+  // 揃った行を白く光らせる。昔のゲームらしく、なめらかに消さず3段階で明るさを変える
+  function renderFlash(t) {
+    const ctx = g.pieceCtx;
+    ctx.clearRect(0, 0, g.w, g.h);
+    ctx.fillStyle = '#ffffff';
+    ctx.globalAlpha = t < 1 / 3 ? 0.85 : t < 2 / 3 ? 0.45 : 0.75;
+    for (const r of g.clearing.rows) ctx.fillRect(0, r, g.w, 1);
+    ctx.globalAlpha = 1;
+  }
+
+  // ネクスト・ホールドの小さな表示（1マス2ピクセルで中央寄せ）
   function drawPreview(canvas, piece) {
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 8, 8);
-    if (!piece) return;
-    const cells = SHAPES[piece.type][0];
+    const cells = piece ? SHAPES[piece.type][0] : [];
     const xs = cells.map(p => p[0]), ys = cells.map(p => p[1]);
     const minX = Math.min(...xs), minY = Math.min(...ys);
-    const ox = 4 - (Math.max(...xs) - minX + 1);
-    const oy = 4 - (Math.max(...ys) - minY + 1);
+    const bw = piece ? Math.max(...xs) - minX + 1 : 0;
+    const bh = piece ? Math.max(...ys) - minY + 1 : 0;
+    const size = Math.max(4, bw, bh) + 1; // 周りに少し余白を取る
+    canvas.width = canvas.height = size * 2;
+    if (!piece) return;
+    const ctx = canvas.getContext('2d');
+    const ox = size - bw, oy = size - bh;
     ctx.fillStyle = piece.color.hex;
     for (const [x, y] of cells) ctx.fillRect(ox + (x - minX) * 2, oy + (y - minY) * 2, 2, 2);
   }
@@ -276,25 +325,25 @@
   }
 
   let msgTimer = null;
-  function showMessage(text) {
+  function showMessage(text, ms = 1200) {
     elMsg.textContent = text;
     clearTimeout(msgTimer);
-    msgTimer = setTimeout(() => { elMsg.textContent = ''; }, 1200);
+    if (ms) msgTimer = setTimeout(() => { elMsg.textContent = ''; }, ms);
+  }
+
+  // サイドパネルに隠れていない、キャンバスが見えている範囲
+  function playArea() {
+    const a = canvasArea.getBoundingClientRect();
+    const left = Math.max(a.left, side.offsetWidth);
+    return { left, top: a.top, right: a.right, bottom: a.bottom };
   }
 
   // 大きな盤面では落下中のブロックが画面外に出てしまうので、端に近づいたらスクロールする。
   // 少しずつ追いかけると落ちる先が見えないため、横は中央、縦は上から1/3の位置まで一度に動かす。
-  // 操作パネル（右側またはスマホでは上部）やタッチ用ボタンに隠れる範囲は見えない扱いにする。
   function followPiece() {
     const c = g && g.cur;
     if (!c) return;
-    const a = canvasArea.getBoundingClientRect();
-    let left = a.left, right = a.right, top = a.top, bottom = a.bottom;
-    const hr = hud.getBoundingClientRect();
-    if (hr.left > a.left + a.width / 2) right = Math.min(right, hr.left - 8);
-    else if (hr.top < a.top + a.height / 2) top = Math.max(top, hr.bottom + 8);
-    if (getComputedStyle(pad).display !== 'none') bottom = Math.min(bottom, pad.getBoundingClientRect().top - 8);
-
+    const { left, top, right, bottom } = playArea();
     const wr = wrap.getBoundingClientRect();
     const cw = wr.width / g.w, ch = wr.height / g.h;
     const cells = SHAPES[c.type][c.rot];
@@ -302,12 +351,64 @@
     const pl = wr.left + Math.min(...xs) * cw, pr = wr.left + (Math.max(...xs) + 1) * cw;
     const pt = wr.top + Math.min(...ys) * ch, pb = wr.top + (Math.max(...ys) + 1) * ch;
     const mx = Math.min(60, (right - left) / 4), my = Math.min(60, (bottom - top) / 4);
-    if (pl < left + mx || pr > right - mx) {
+    // 盤面がその向きに丸ごと見えているなら動かさない（小さな盤面が勝手にずれないように）
+    const fitsX = wr.left >= left && wr.right <= right;
+    const fitsY = wr.top >= top && wr.bottom <= bottom;
+    if (!fitsX && (pl < left + mx || pr > right - mx)) {
       canvasArea.scrollLeft += (pl + pr) / 2 - (left + right) / 2;
     }
-    if (pt < top + my || pb > bottom - my) {
+    if (!fitsY && (pt < top + my || pb > bottom - my)) {
       canvasArea.scrollTop += (pt + pb) / 2 - (top + (bottom - top) / 3);
     }
+  }
+
+  // ── キャンバスの配置 ──
+  function canvasCenter() {
+    const r = wrap.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  // 倍率を変え、キャンバスの中心が画面上の(x, y)に来るようにスクロールする
+  function placeCanvas(z, x, y) {
+    setZoom(z);
+    const c = canvasCenter();
+    canvasArea.scrollLeft += c.x - x;
+    canvasArea.scrollTop += c.y - y;
+  }
+
+  // 今の位置から目的の倍率・位置まで、MOVE_STEPS段階に分けてかくかくと動かす
+  async function moveCanvasStepped(z1, x1, y1, duration) {
+    const z0 = zoom;
+    const { x: x0, y: y0 } = canvasCenter();
+    for (let i = 1; i <= MOVE_STEPS; i++) {
+      await sleep(duration / MOVE_STEPS);
+      const t = i / MOVE_STEPS;
+      placeCanvas(z0 * Math.pow(z1 / z0, t), x0 + (x1 - x0) * t, y0 + (y1 - y0) * t);
+    }
+  }
+
+  // テトリス画面でのキャンバスの置き場所：サイドパネルの右側の中央。
+  // 見える範囲にちょうど収まる倍率にする。ただし巨大な盤面を丸ごと収めると
+  // 1マスが見えないほど小さくなるので、1マスが画面上で3px未満になるほどは縮めない
+  const MIN_CELL_ON_SCREEN = 3;
+  function gameViewTarget() {
+    const { left, top, right, bottom } = playArea();
+    const { w, h } = canvasSize();
+    const fit = Math.min((right - left) * 0.86 / w, (bottom - top) * 0.86 / h);
+    const lower = Math.min(zoom, MIN_CELL_ON_SCREEN / cellPx());
+    return {
+      zoom: Math.max(lower, Math.min(fit, MAX_ZOOM)),
+      x: (left + right) / 2,
+      y: (top + bottom) / 2,
+    };
+  }
+
+  // 画面の構成（キャンバスエリアの大きさ）が変わっても、キャンバスが画面上で動かないようにする
+  function switchLayout(fn) {
+    const pos = canvasScreenPos();
+    fn();
+    setZoom(zoom); // エリアの大きさに合わせてスクロール用の余白を取り直す
+    restoreCanvasScreenPos(pos);
   }
 
   // ── ループ ──
@@ -325,9 +426,18 @@
   }
 
   function tick(now) {
-    if (!g) return;
+    if (!g || g.state === 'outro') return;
     g.raf = requestAnimationFrame(tick);
-    if (g.state !== 'playing' || !g.cur) return;
+    if (g.state !== 'playing') return;
+
+    if (g.clearing) {
+      const t = (now - g.clearing.start) / FLASH_MS;
+      if (t < 1) { renderFlash(t); return; }
+      clearLines(g.clearing.rows.length);
+      g.clearing = null;
+      nextTurn();
+    }
+    if (!g.cur) return;
 
     const dir = horizontalDir();
     if (dir) {
@@ -383,7 +493,7 @@
   }
 
   function release(act) {
-    if (g && act in g.held) g.held[act] = 0;
+    if (g && g.held && act in g.held) g.held[act] = 0;
   }
 
   const KEY_ACTIONS = {
@@ -396,8 +506,8 @@
     KeyC: 'hold', ShiftLeft: 'hold', ShiftRight: 'hold',
   };
 
-  // 遊んでいる間はエディタのショートカット（ツール切替・Undo・Dキーの確認モードなど）を
-  // 一切効かせないよう、どのリスナーより先に受け取って止める
+  // 遊んでいる間（出入りの演出中も含む）はエディタのショートカット（ツール切替・Undo・
+  // Dキーの確認モードなど）を一切効かせないよう、どのリスナーより先に受け取って止める
   window.addEventListener('keydown', e => {
     if (!g || isTypingTarget(e.target)) return;
     e.stopImmediatePropagation();
@@ -407,7 +517,7 @@
       else if (g.state === 'paused') resume();
       return;
     }
-    if (g.state !== 'playing') return; // 一時停止中などはパネルのボタン操作（Enter・Space）を妨げない
+    if (g.state !== 'playing') return; // ポーズ中などはパネルのボタン操作（Enter・Space）を妨げない
     const act = KEY_ACTIONS[e.code];
     if (!act) return;
     e.preventDefault();
@@ -424,7 +534,7 @@
     release(act);
   }, true);
 
-  // 別のウィンドウに移ったら一時停止（押しっぱなしのキーの離した通知も来なくなるため）
+  // 別のウィンドウに移ったらポーズ（押しっぱなしのキーの離した通知も来なくなるため）
   window.addEventListener('blur', () => { if (g && g.state === 'playing') pause(); });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && g && g.state === 'playing') pause();
@@ -443,25 +553,45 @@
     b.addEventListener('contextmenu', e => e.preventDefault());
   });
 
-  // ── 開始・一時停止・終了 ──
+  // テトリス中のキャンバスはマウスのドラッグで移動する（ホイールの拡大縮小は script.js 側。
+  // タッチの1本指スクロール・2本指ピンチは、エディタと同じ仕組みがそのまま効く）
+  let panDrag = null;
+  canvasArea.addEventListener('pointerdown', e => {
+    if (!g || e.pointerType !== 'mouse' || e.button !== 0) return;
+    e.preventDefault();
+    panDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, sl: canvasArea.scrollLeft, st: canvasArea.scrollTop };
+    try { canvasArea.setPointerCapture(e.pointerId); } catch (err) { /* 捕捉できなくても動かせる */ }
+    canvasArea.classList.add('tetris-grabbing');
+  });
+  canvasArea.addEventListener('pointermove', e => {
+    if (!panDrag || e.pointerId !== panDrag.id) return;
+    canvasArea.scrollLeft = panDrag.sl - (e.clientX - panDrag.x);
+    canvasArea.scrollTop = panDrag.st - (e.clientY - panDrag.y);
+  });
+  ['pointerup', 'pointercancel'].forEach(type => {
+    canvasArea.addEventListener(type, e => {
+      if (!panDrag || e.pointerId !== panDrag.id) return;
+      panDrag = null;
+      canvasArea.classList.remove('tetris-grabbing');
+    });
+  });
+
+  // ── ポーズ・ゲームオーバー ──
   function showPanel(title, mode) {
     panelTitle.textContent = title;
     btnResume.style.display = mode === 'paused' ? '' : 'none';
-    btnRetry.style.display = mode === 'over' ? '' : 'none';
     btnKeep.disabled = !g.field.some(Boolean);
     panel.style.display = '';
-    btnPause.style.display = 'none';
   }
 
   function hidePanel() {
     panel.style.display = 'none';
-    btnPause.style.display = '';
   }
 
   function pause() {
     g.state = 'paused';
     g.held = { left: 0, right: 0, down: 0 };
-    showPanel('⏸ 一時停止中', 'paused');
+    showPanel('PAUSE', 'paused');
   }
 
   function resume() {
@@ -476,20 +606,13 @@
     g.state = 'over';
     g.cur = null;
     g.pieceCtx.clearRect(0, 0, g.w, g.h);
-    showPanel(`GAME OVER\nスコア ${g.score.toLocaleString()}`, 'over');
+    showPanel(`GAME OVER\nSCORE ${g.score.toLocaleString()}`, 'over');
   }
 
-  function makeLayerCanvas() {
-    const cv = document.createElement('canvas');
-    cv.className = 'tetris-layer';
-    cv.width = cols;
-    cv.height = rows;
-    return cv;
-  }
-
-  // 盤面を用意する。useArtなら今の絵（見えているレイヤーを重ねた色）を積もったブロックとして置く
+  // ── 盤面の準備 ──
+  // useArtなら今の絵（見えているレイヤーを重ねた色）を積もったブロックとして置く
   function resetBoard(useArt) {
-    const w = cols, h = rows;
+    const { w, h } = g;
     g.fieldImg = g.fieldCtx.createImageData(w, h);
     g.field = new Uint32Array(g.fieldImg.data.buffer);
     g.rowFill = new Int32Array(h);
@@ -507,6 +630,8 @@
     }
     g.fieldCtx.putImageData(g.fieldImg, 0, 0);
     g.pieceCtx.clearRect(0, 0, w, h);
+    g.cur = null;
+    g.clearing = null;
     g.bag = [];
     g.score = 0;
     g.lines = 0;
@@ -515,34 +640,102 @@
     g.held = { left: 0, right: 0, down: 0 };
     g.lastDir = null;
     g.lastShift = 0;
-    g.state = 'playing';
+    g.next = nextPiece();
     elMsg.textContent = '';
     hidePanel();
-    g.next = nextPiece();
+    updateHud();
+  }
+
+  function startRound() {
+    g.state = 'playing';
     spawn(nextPiece());
     updateHud();
   }
 
-  function startGame() {
-    const useArt = useArtCheck.checked;
+  function retry(useArt) {
+    resetBoard(useArt);
+    startRound();
+    if (document.activeElement) document.activeElement.blur();
+  }
+
+  function makeLayerCanvas() {
+    const cv = document.createElement('canvas');
+    cv.className = 'tetris-layer';
+    cv.width = cols;
+    cv.height = rows;
+    return cv;
+  }
+
+  function fillSidePanel() {
+    elSize.textContent = `${g.w}×${g.h}`;
+    colorsEl.innerHTML = '';
+    g.palette.forEach(hex => {
+      const sw = document.createElement('i');
+      sw.style.background = hex;
+      colorsEl.appendChild(sw);
+    });
+    colorsBox.style.display = g.palette.length ? '' : 'none';
+    const notes = [];
+    if (g.w >= 100) notes.push(`1列そろえるのに ${g.w.toLocaleString()} マス必要です`);
+    if (g.extras) notes.push('巨大盤面ボーナス：特殊ブロック出現中');
+    elNote.textContent = notes.join('\n');
+  }
+
+  // 画面にドット風の文字を使う（テトリスを始めたときにだけ読み込む）
+  function loadRetroFont() {
+    if (document.getElementById('tetris-font')) return;
+    const link = document.createElement('link');
+    link.id = 'tetris-font';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=DotGothic16&display=swap';
+    document.head.appendChild(link);
+  }
+
+  // ── 開始と終了 ──
+  async function openGame() {
+    loadRetroFont();
+    const body = document.body;
+    const center = canvasCenter();
+    g = {
+      state: 'intro',
+      w: cols, h: rows,
+      extras: cols >= EXTRA_MIN_SIZE && rows >= EXTRA_MIN_SIZE,
+      palette: customColors.filter(Boolean),
+      hexOf: new Map(),
+      saved: { zoom, x: center.x, y: center.y }, // 終わったらこの表示に戻す
+      raf: 0,
+    };
+    if (document.activeElement) document.activeElement.blur();
+
+    // ① キャンバス以外を画面外へ
+    body.classList.add('tetris-playing', 'tetris-out');
+    await sleep(UI_OUT_MS);
+
+    // ② キャンバスエリアを画面いっぱいにして盤面を用意する
+    switchLayout(() => body.classList.add('tetris-stage'));
     const fieldCanvas = makeLayerCanvas();
     const pieceCanvas = makeLayerCanvas();
     cMain.after(fieldCanvas, pieceCanvas);
-    g = {
-      w: cols, h: rows,
-      useArt,
-      palette: paletteColors(),
-      hexOf: new Map(),
+    Object.assign(g, {
       fieldCanvas, pieceCanvas,
       fieldCtx: fieldCanvas.getContext('2d'),
       pieceCtx: pieceCanvas.getContext('2d'),
-      raf: 0,
-    };
-    document.body.classList.add('tetris-playing');
-    elSize.textContent = `${cols}×${rows}`;
-    elNote.textContent = cols >= 100 ? `1列そろえるのに ${cols.toLocaleString()} マス必要です` : '';
-    if (document.activeElement) document.activeElement.blur();
-    resetBoard(useArt);
+    });
+    fillSidePanel();
+    resetBoard(false);
+
+    // ③ キャンバスを右へ寄せながら、サイドパネルを左から出す
+    body.classList.add('tetris-side-in');
+    const target = gameViewTarget();
+    await Promise.all([
+      moveCanvasStepped(target.zoom, target.x, target.y, SIDE_MS),
+      sleep(SIDE_MS),
+    ]);
+
+    showMessage('READY', 0);
+    await sleep(700);
+    showMessage('GO!', 800);
+    startRound();
     g.raf = requestAnimationFrame(tick);
   }
 
@@ -563,45 +756,45 @@
     updateLayerPanel();
   }
 
-  function endGame(keep) {
+  async function closeGame(keep) {
+    if (!g || g.state === 'outro' || g.state === 'intro') return;
     if (keep) keepBoardAsLayer();
+    const body = document.body;
+    g.state = 'outro';
     cancelAnimationFrame(g.raf);
+    hidePanel();
+    clearTimeout(msgTimer);
+    elMsg.textContent = '';
+
+    // ③の逆：サイドパネルを引っ込めながら、キャンバスを元の倍率・位置へ戻す
+    body.classList.remove('tetris-side-in');
+    body.classList.add('tetris-side-out');
+    await Promise.all([
+      moveCanvasStepped(g.saved.zoom, g.saved.x, g.saved.y, SIDE_MS),
+      sleep(SIDE_MS),
+    ]);
+
+    // ②の逆：盤面を片付けてエディタの配置に戻す（描いた絵がまた見えるようになる）
     g.fieldCanvas.remove();
     g.pieceCanvas.remove();
+    switchLayout(() => body.classList.remove('tetris-stage', 'tetris-side-out'));
+
+    // ①の逆：消えていた部品を戻す
+    body.classList.remove('tetris-out');
+    body.classList.add('tetris-return');
+    await sleep(UI_OUT_MS);
+    body.classList.remove('tetris-return', 'tetris-playing');
     g = null;
-    document.body.classList.remove('tetris-playing');
-    clearTimeout(msgTimer);
   }
 
   document.getElementById('btn-tetris').addEventListener('click', () => {
     if (!started || g) return;
-    closeFileMenu();
-    startSize.textContent = `${cols}×${rows}`;
-    const n = paletteColors().length;
-    const notes = [
-      n ? `ブロックの色：カスタムカラーの ${n} 色` : 'ブロックの色：ランダム（カスタムカラーが空のため）',
-    ];
-    if (cols >= 100) notes.push(`※ 1列そろえるのに ${cols.toLocaleString()} マス必要です`);
-    notes.push('遊び終わったら、盤面をレイヤーとして残すこともできます');
-    startNote.textContent = notes.join('\n');
-    startNote.style.whiteSpace = 'pre-line';
-    startModal.style.display = 'flex';
+    openGame();
   });
-  document.getElementById('btn-tetris-start').addEventListener('click', () => {
-    startModal.style.display = 'none';
-    startGame();
-  });
-  document.getElementById('btn-tetris-cancel').addEventListener('click', () => {
-    startModal.style.display = 'none';
-  });
-
   btnPause.addEventListener('click', () => { if (g && g.state === 'playing') pause(); });
   btnResume.addEventListener('click', () => { if (g && g.state === 'paused') resume(); });
-  btnRetry.addEventListener('click', () => {
-    if (!g) return;
-    resetBoard(g.useArt);
-    if (document.activeElement) document.activeElement.blur();
-  });
-  btnKeep.addEventListener('click', () => { if (g) endGame(true); });
-  document.getElementById('btn-tetris-quit').addEventListener('click', () => { if (g) endGame(false); });
+  document.getElementById('btn-tetris-retry').addEventListener('click', () => { if (g) retry(false); });
+  document.getElementById('btn-tetris-retry-art').addEventListener('click', () => { if (g) retry(true); });
+  btnKeep.addEventListener('click', () => closeGame(true));
+  document.getElementById('btn-tetris-quit').addEventListener('click', () => closeGame(false));
 })();

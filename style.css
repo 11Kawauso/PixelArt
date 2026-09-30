@@ -1585,7 +1585,11 @@ a.menu-item:hover { background: var(--bg); }
   border-left: 1px solid var(--border);
 }
 
+
 /* ── テトリス ── */
+/* 右下のズーム欄にある開始ボタン */
+.zoom-controls .tetris-start-btn svg { display: block; }
+
 /* 盤面は1マス=1ピクセルのキャンバス2枚（積もったブロック・落下中のブロック）を
    canvas-mainの直後に差し込み、拡大表示はほかのキャンバスと同じくCSSに任せる。
    DOM順でグリッド線より前に入るので、グリッド線はブロックの上に表示される。 */
@@ -1597,163 +1601,237 @@ a.menu-item:hover { background: var(--bg); }
   pointer-events: none;
   image-rendering: pixelated;
 }
-/* 遊んでいる間は描いた絵（と選択表示）を隠し、キャンバスに描けないようにする */
-body.tetris-playing #canvas-main,
-body.tetris-playing #canvas-overlay,
-body.tetris-playing .line-highlight {
-  visibility: hidden;
-}
-body.tetris-playing #canvas-overlay { pointer-events: none; }
-/* 途中でサイズ変更やUndoをされると盤面が壊れるので、エディタの操作は止めておく */
+
+/* 遊んでいる間（出入りの演出中も含む）はキャンバスに描けず、エディタも操作できない */
+body.tetris-playing #canvas-overlay { visibility: hidden; pointer-events: none; }
 body.tetris-playing header,
 body.tetris-playing .panel,
 body.tetris-playing .panel-toggle,
 body.tetris-playing .panel-resize,
-body.tetris-playing .layer-dock {
-  pointer-events: none;
-  opacity: 0.45;
-}
+body.tetris-playing .layer-dock,
+body.tetris-playing .zoom-controls,
+body.tetris-playing .color-history,
 body.tetris-playing .shape-menu,
 body.tetris-playing .ref-toggle,
 body.tetris-playing .ref-window,
-body.tetris-playing .color-history,
-body.tetris-playing .color-history *,
-body.tetris-playing #btn-art-preview {
-  visibility: hidden !important;
+body.tetris-playing .statusbar,
+body.tetris-playing .ruler,
+body.tetris-playing .ruler-corner {
+  pointer-events: none;
 }
 
-.tetris-start-card { max-width: 320px; }
-.tetris-start-card .layer-hint { text-align: left; margin-bottom: 4px; }
-.tetris-start-card .detect-line-label { justify-content: center; margin-bottom: 14px; }
+/* ① キャンバス以外が昔のゲームのように、かくかくと画面外へ消えていく */
+@keyframes tetris-out-up    { to { transform: translateY(-100%); } }
+@keyframes tetris-out-down  { to { transform: translateY(100%); } }
+@keyframes tetris-out-left  { to { transform: translateX(-100%); } }
+@keyframes tetris-fade-out  { to { opacity: 0; visibility: hidden; } }
+@keyframes tetris-back-up   { from { transform: translateY(100%); }  to { transform: none; } }
+@keyframes tetris-back-down { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes tetris-back-right { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes tetris-fade-in   { from { opacity: 0; visibility: hidden; } to { opacity: 1; visibility: visible; } }
 
-.tetris-hud {
+body.tetris-out header { animation: tetris-out-up 1.2s steps(6, end) forwards; }
+body.tetris-out .statusbar { animation: tetris-out-down 1.2s steps(6, end) forwards; }
+/* スマホで閉じているパネルは元々画面外なので動かさない */
+body.tetris-out .panel:not(.collapsed),
+body.tetris-out .layer-dock { animation: tetris-out-left 1.2s steps(6, end) forwards; }
+body.tetris-out .panel-toggle,
+body.tetris-out .panel-resize,
+body.tetris-out .zoom-controls,
+body.tetris-out .color-history,
+body.tetris-out .shape-menu,
+body.tetris-out .ref-toggle,
+body.tetris-out .ref-window,
+body.tetris-out .ruler,
+body.tetris-out .ruler-corner,
+body.tetris-out .line-highlight { animation: tetris-fade-out 1.2s steps(4, end) forwards; }
+
+/* 終了時は同じ動きを逆向きにして戻ってくる */
+body.tetris-return header { animation: tetris-back-down 1.2s steps(6, end); }
+body.tetris-return .statusbar { animation: tetris-back-up 1.2s steps(6, end); }
+body.tetris-return .panel:not(.collapsed),
+body.tetris-return .layer-dock { animation: tetris-back-right 1.2s steps(6, end); }
+body.tetris-return .panel-toggle,
+body.tetris-return .panel-resize,
+body.tetris-return .zoom-controls,
+body.tetris-return .color-history,
+body.tetris-return .shape-menu,
+body.tetris-return .ref-toggle,
+body.tetris-return .ref-window,
+body.tetris-return .ruler,
+body.tetris-return .ruler-corner,
+body.tetris-return .line-highlight { animation: tetris-fade-in 1.2s steps(4, end); }
+
+/* ② 消え終わったら、キャンバスエリアを画面いっぱいに広げてテトリス画面にする。
+   描いた絵は隠し（足場にする場合は盤面側に写してある）、定規とスクロールバーも出さない。 */
+body.tetris-stage .canvas-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+body.tetris-stage #canvas-main,
+body.tetris-stage .ruler,
+body.tetris-stage .ruler-corner,
+body.tetris-stage .line-highlight { display: none !important; }
+body.tetris-stage .canvas-area { scrollbar-width: none; cursor: grab; }
+body.tetris-stage .canvas-area::-webkit-scrollbar { display: none; }
+body.tetris-stage .canvas-area.tetris-grabbing { cursor: grabbing; }
+
+/* ③ 左からかくかくと出てくるサイドパネル（画面の約1/3） */
+@keyframes tetris-side-in  { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes tetris-side-out { from { transform: none; } to { transform: translateX(-100%); } }
+.tetris-side {
+  --t-bg: #15151f;
+  --t-box: #0b0b12;
+  --t-line: #34344c;
+  --t-text: #f2f2f2;
+  --t-muted: #8c8ca8;
+  --t-accent: #ffd23f;
   display: none;
   position: fixed;
-  top: 56px;
-  right: 12px;
-  z-index: 60;
-  width: 210px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-}
-body.tetris-playing .tetris-hud { display: block; }
-.tetris-hud-head { font-weight: 500; margin-bottom: 8px; }
-.tetris-hud-head span { color: var(--text-muted); font-weight: 400; font-size: 11px; }
-.tetris-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  margin-bottom: 8px;
-}
-.tetris-stats div,
-.tetris-previews div {
-  display: flex;
+  top: 0; left: 0; bottom: 0;
+  width: max(33.333vw, 150px);
+  z-index: 70;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  justify-content: space-between;
+  gap: clamp(8px, 2vh, 24px);
+  padding: clamp(10px, 2.4vh, 32px) clamp(10px, 2vw, 36px);
+  background: var(--t-bg);
+  color: var(--t-text);
+  font-family: 'DotGothic16', ui-monospace, 'MS Gothic', monospace;
+  border-right: 4px solid #000;
+  box-shadow: 6px 0 0 rgba(0,0,0,0.18);
+  overflow: hidden;
+  transform: translateX(-100%);
 }
-.tetris-stats span,
-.tetris-previews span { font-size: 10px; color: var(--text-muted); }
-.tetris-stats b { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.tetris-previews {
-  display: flex;
-  justify-content: space-around;
-  margin-bottom: 8px;
+body.tetris-stage .tetris-side { display: flex; }
+body.tetris-side-in .tetris-side { animation: tetris-side-in 1s steps(6, end) forwards; }
+body.tetris-side-out .tetris-side { animation: tetris-side-out 1s steps(6, end) forwards; }
+
+.tetris-side section { display: flex; flex-direction: column; gap: clamp(6px, 1.4vh, 14px); min-height: 0; }
+.tetris-title {
+  font-size: clamp(18px, 2.6vw, 40px);
+  letter-spacing: 0.12em;
+  color: var(--t-accent);
+  text-shadow: 3px 3px 0 #000;
+  line-height: 1.1;
 }
-.tetris-previews canvas {
-  width: 44px;
-  height: 44px;
-  image-rendering: pixelated;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: repeating-conic-gradient(#e6e6e6 0% 25%, #f4f4f4 0% 50%) 0 0 / 11px 11px;
-}
-.tetris-msg {
-  min-height: 18px;
-  text-align: center;
-  font-weight: 700;
-  font-size: 14px;
-  color: var(--danger);
-}
-.tetris-note {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-align: center;
-  margin-bottom: 6px;
-}
-.tetris-note:empty { display: none; }
-.tetris-keys {
-  font-size: 10px;
-  line-height: 1.6;
-  color: var(--text-muted);
-  margin-bottom: 8px;
-}
-.tetris-pause-btn { width: 100%; }
-.tetris-panel {
+.tetris-title span { font-size: 0.4em; letter-spacing: 0.04em; color: var(--t-muted); text-shadow: none; }
+.tetris-label { font-size: clamp(10px, 0.9vw, 13px); letter-spacing: 0.1em; color: var(--t-muted); }
+.tetris-box {
+  background: var(--t-box);
+  border: 2px solid var(--t-line);
+  padding: clamp(6px, 1vw, 12px);
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
 }
-.tetris-panel p { text-align: center; font-weight: 600; white-space: pre-line; }
+.tetris-colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(10px, 1.3vw, 20px), 1fr));
+  gap: 3px;
+}
+.tetris-colors i { display: block; aspect-ratio: 1; box-shadow: inset -2px -2px 0 rgba(0,0,0,0.3); }
+.tetris-previews { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(6px, 1vw, 14px); }
+.tetris-previews .tetris-box { align-items: center; }
+.tetris-previews canvas {
+  width: 100%;
+  max-width: 120px;
+  aspect-ratio: 1;
+  image-rendering: pixelated;
+}
+.tetris-side-mid { justify-content: center; }
+.tetris-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 2px dashed var(--t-line);
+  padding-bottom: 4px;
+}
+.tetris-stat b {
+  font-weight: 400;
+  font-size: clamp(16px, 2.4vw, 38px);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tetris-msg {
+  min-height: 1.3em;
+  text-align: center;
+  font-size: clamp(16px, 2vw, 30px);
+  color: var(--t-accent);
+  text-shadow: 3px 3px 0 #000;
+}
+.tetris-note { font-size: clamp(10px, 0.9vw, 13px); color: var(--t-muted); text-align: center; white-space: pre-line; }
+.tetris-note:empty { display: none; }
 
-/* タッチ操作用ボタン。キーボードが無い端末でだけ出す */
-.tetris-pad { display: none; }
+.tetris-keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  font-size: clamp(10px, 0.95vw, 14px);
+}
+.tetris-keys dt { color: var(--t-accent); }
+.tetris-keys dd { color: var(--t-text); }
+
+/* サイドパネル内のボタンはドット絵風にする */
+.tetris-side button {
+  font-family: inherit;
+  font-size: clamp(11px, 1vw, 14px);
+  height: auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  justify-content: center;
+  color: var(--t-text);
+  background: #28283c;
+  border: 2px solid #000;
+  border-radius: 0;
+  box-shadow: inset -3px -3px 0 rgba(0,0,0,0.45), inset 3px 3px 0 rgba(255,255,255,0.12);
+}
+.tetris-side button:hover { background: #34344e; }
+.tetris-side button:active { box-shadow: inset 3px 3px 0 rgba(0,0,0,0.45); }
+.tetris-side button.primary { background: var(--t-accent); color: #000; }
+.tetris-side button.primary:hover { background: #ffe07a; }
+.tetris-side button:disabled { opacity: 0.4; }
+
+/* タッチ端末ではキー説明の代わりに操作ボタンを出す */
+.tetris-pad { display: none; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.tetris-pad button { aspect-ratio: 1; min-height: 0; padding: 0; font-size: 18px; touch-action: none; }
+.tetris-pad button[data-act="hold"] { font-size: 10px; }
+.tetris-pad .tetris-pad-wide { grid-column: 1 / -1; aspect-ratio: auto; min-height: 40px; font-size: 13px; }
+.tetris-touch-hint { display: none; font-size: 10px; color: var(--t-muted); text-align: center; }
 @media (pointer: coarse) {
   .tetris-keys { display: none; }
-  body.tetris-playing .tetris-pad {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    position: fixed;
-    left: 8px;
-    right: 8px;
-    bottom: 48px;
-    z-index: 60;
-    pointer-events: none; /* ボタンの間はキャンバスのピンチ操作に回す */
-  }
-  .tetris-pad-group { display: flex; gap: 6px; pointer-events: auto; }
-  .tetris-pad button {
-    width: 52px;
-    height: 52px;
-    font-size: 20px;
-    border-radius: 50%;
-    padding: 0;
-    justify-content: center;
-    background: rgba(255,255,255,0.85);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    touch-action: none;
-  }
-  .tetris-pad button[data-act="hold"] { font-size: 11px; }
-  .tetris-pad button:active { background: var(--accent); color: #fff; }
+  .tetris-pad { display: grid; }
+  .tetris-touch-hint { display: block; }
 }
+
+/* ポーズ・ゲームオーバー */
+.tetris-panel {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 8, 14, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.tetris-panel-card { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
+.tetris-panel-card p {
+  text-align: center;
+  font-size: clamp(16px, 2vw, 28px);
+  color: var(--t-accent);
+  text-shadow: 3px 3px 0 #000;
+  white-space: pre-line;
+  margin-bottom: 8px;
+}
+
 @media (max-width: 640px) {
-  /* スマホでは上部に横長で表示し、キャンバスを隠しすぎないようにする */
-  .tetris-hud {
-    top: 48px;
-    left: 8px;
-    right: 8px;
-    width: auto;
-    padding: 8px 10px;
-    display: none;
-  }
-  body.tetris-playing .tetris-hud {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    align-items: center;
-    column-gap: 10px;
-  }
-  .tetris-hud-head { grid-column: 1 / -1; margin-bottom: 4px; }
-  .tetris-stats, .tetris-previews { margin-bottom: 0; }
-  .tetris-previews { gap: 8px; }
-  .tetris-previews canvas { width: 32px; height: 32px; }
-  .tetris-pause-btn { width: auto; }
-  .tetris-msg, .tetris-note, .tetris-keys, .tetris-panel { grid-column: 1 / -1; }
-  .tetris-msg:empty { display: none; }
-  .tetris-pad button { width: 46px; height: 46px; }
+  .tetris-side { padding: 10px 8px; gap: 8px; }
+  .tetris-title { font-size: 16px; }
+  .tetris-stat { flex-direction: column; align-items: flex-start; gap: 0; }
+  .tetris-stat b { font-size: 16px; }
+  .tetris-pad { gap: 4px; }
+  .tetris-pad button { font-size: 15px; }
 }

@@ -56,9 +56,6 @@
       <button id="btn-login" class="menu-item">G ログイン</button>
 
       <div class="menu-divider"></div>
-      <button id="btn-tetris" class="menu-item">🎮 このサイズでテトリス</button>
-
-      <div class="menu-divider"></div>
       <a class="menu-item" href="terms.html" target="_blank" rel="noopener">📄 利用規約</a>
       <a class="menu-item" href="privacy.html" target="_blank" rel="noopener">🔒 プライバシーポリシー</a>
     </div>
@@ -494,6 +491,14 @@
 
 <!-- ズーム（画面右下固定） -->
 <div class="zoom-controls">
+  <button id="btn-tetris" class="tetris-start-btn" title="今のキャンバスサイズでテトリス">
+    <svg width="15" height="10" viewBox="0 0 32 21" aria-hidden="true" shape-rendering="crispEdges">
+      <g fill="#8e44ad">
+        <rect x="0" y="0" width="10" height="10"/><rect x="11" y="0" width="10" height="10"/>
+        <rect x="22" y="0" width="10" height="10"/><rect x="11" y="11" width="10" height="10"/>
+      </g>
+    </svg>
+  </button>
   <button id="btn-art-preview" title="押している間、描いた絵だけを表示（Dキー）">👁</button>
   <button id="btn-zoom-out">−</button>
   <span id="zoom-label">100%</span>
@@ -568,64 +573,66 @@
 <!-- 通知トースト -->
 <div class="cloud-toast" id="cloud-toast" style="display:none"></div>
 
-<!-- テトリス（今のキャンバスサイズがそのまま盤面になる） -->
-<div class="confirm-modal" id="tetris-start-modal" style="display:none">
-  <div class="confirm-card tetris-start-card">
-    <p>🎮 <b id="tetris-start-size"></b> のテトリス</p>
-    <div class="layer-hint" id="tetris-start-note"></div>
-    <label class="detect-line-label">
-      <input type="checkbox" id="tetris-use-art" style="accent-color:var(--accent)">
-      今の絵を足場にする
-    </label>
-    <div class="confirm-actions">
-      <button id="btn-tetris-start" class="primary">スタート</button>
-      <button id="btn-tetris-cancel">キャンセル</button>
+<!-- テトリス画面のサイドパネル（遊んでいる間だけ左から出てくる） -->
+<aside class="tetris-side" id="tetris-side">
+  <section class="tetris-side-top">
+    <div class="tetris-title">TETRIS <span id="tetris-size"></span></div>
+    <div class="tetris-box" id="tetris-colors-box">
+      <div class="tetris-label">COLORS</div>
+      <div class="tetris-colors" id="tetris-colors"></div>
+    </div>
+    <div class="tetris-previews">
+      <div class="tetris-box"><div class="tetris-label">NEXT</div><canvas id="tetris-next"></canvas></div>
+      <div class="tetris-box"><div class="tetris-label">HOLD</div><canvas id="tetris-hold"></canvas></div>
+    </div>
+  </section>
+
+  <section class="tetris-side-mid">
+    <div class="tetris-stat"><span class="tetris-label">SCORE</span><b id="tetris-score">0</b></div>
+    <div class="tetris-stat"><span class="tetris-label">LINES</span><b id="tetris-lines">0</b></div>
+    <div class="tetris-stat"><span class="tetris-label">LEVEL</span><b id="tetris-level">1</b></div>
+    <div class="tetris-msg" id="tetris-msg"></div>
+    <div class="tetris-note" id="tetris-note"></div>
+  </section>
+
+  <section class="tetris-side-bottom">
+    <div class="tetris-label">CONTROLS</div>
+    <dl class="tetris-keys">
+      <dt>← →</dt><dd>移動</dd>
+      <dt>↓</dt><dd>ゆっくり落とす</dd>
+      <dt>Space</dt><dd>一気に落とす</dd>
+      <dt>↑ / X</dt><dd>右回転</dd>
+      <dt>Z</dt><dd>左回転</dd>
+      <dt>C</dt><dd>ホールド</dd>
+      <dt>Esc</dt><dd>ポーズ</dd>
+      <dt>ドラッグ</dt><dd>キャンバス移動</dd>
+      <dt>ホイール</dt><dd>拡大縮小</dd>
+    </dl>
+    <div class="tetris-pad" id="tetris-pad">
+      <button data-act="ccw">⟲</button>
+      <button data-act="cw">⟳</button>
+      <button data-act="hold">HOLD</button>
+      <button data-act="left">◀</button>
+      <button data-act="down">▼</button>
+      <button data-act="right">▶</button>
+      <button data-act="drop" class="tetris-pad-wide">⤓ 一気に落とす</button>
+    </div>
+    <div class="tetris-touch-hint">1本指で移動・2本指で拡大縮小</div>
+    <button id="btn-tetris-pause" class="tetris-pause-btn">⏸ ポーズ</button>
+  </section>
+
+  <!-- ポーズ・ゲームオーバー時にサイドパネルの上に重ねる -->
+  <div class="tetris-panel" id="tetris-panel" style="display:none">
+    <div class="tetris-panel-card">
+      <p id="tetris-panel-title"></p>
+      <button id="btn-tetris-resume" class="primary">▶ 再開</button>
+      <button id="btn-tetris-retry" class="primary">🔁 もう一度</button>
+      <button id="btn-tetris-retry-art">🧱 今の絵を足場にしてもう一度</button>
+      <button id="btn-tetris-keep">🖼 盤面をレイヤーに残して終了</button>
+      <button id="btn-tetris-quit">✕ 終了</button>
     </div>
   </div>
-</div>
-
-<div class="tetris-hud" id="tetris-hud">
-  <div class="tetris-hud-head">🎮 テトリス <span id="tetris-size"></span></div>
-  <div class="tetris-stats">
-    <div><span>スコア</span><b id="tetris-score">0</b></div>
-    <div><span>ライン</span><b id="tetris-lines">0</b></div>
-    <div><span>レベル</span><b id="tetris-level">1</b></div>
-  </div>
-  <div class="tetris-previews">
-    <div><span>ネクスト</span><canvas id="tetris-next" width="8" height="8"></canvas></div>
-    <div><span>ホールド</span><canvas id="tetris-hold" width="8" height="8"></canvas></div>
-  </div>
-  <div class="tetris-msg" id="tetris-msg"></div>
-  <div class="tetris-note" id="tetris-note"></div>
-  <div class="tetris-keys">
-    ←→ 移動 ／ ↓ ソフトドロップ<br>
-    Space ハードドロップ ／ C ホールド<br>
-    ↑・X 右回転 ／ Z 左回転 ／ Esc 一時停止
-  </div>
-  <button id="btn-tetris-pause" class="tetris-pause-btn">⏸ 一時停止</button>
-  <div class="tetris-panel" id="tetris-panel" style="display:none">
-    <p id="tetris-panel-title"></p>
-    <button id="btn-tetris-resume" class="primary">▶ 再開</button>
-    <button id="btn-tetris-retry" class="primary">🔁 もう一度</button>
-    <button id="btn-tetris-keep">🖼 盤面をレイヤーに残して終了</button>
-    <button id="btn-tetris-quit" class="danger">終了</button>
-  </div>
-</div>
-
-<!-- テトリスのタッチ操作用ボタン（タッチ端末のみ表示） -->
-<div class="tetris-pad" id="tetris-pad">
-  <div class="tetris-pad-group">
-    <button data-act="left">◀</button>
-    <button data-act="down">▼</button>
-    <button data-act="right">▶</button>
-  </div>
-  <div class="tetris-pad-group">
-    <button data-act="hold">HOLD</button>
-    <button data-act="ccw">⟲</button>
-    <button data-act="cw">⟳</button>
-    <button data-act="drop">⤓</button>
-  </div>
-</div>
+</aside>
 
 <script src="script.js"></script>
 <script src="tetris.js"></script>
