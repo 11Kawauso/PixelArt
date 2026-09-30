@@ -3211,8 +3211,19 @@ document.getElementById('btn-zoom-out').addEventListener('click', () => setZoom(
 // スクロール量を比率計算で求めることはできない。ズーム前後で実際に
 // レイアウトされたwrapの画面上の位置を測定し、カーソル直下にあった
 // セル座標がズーム後も同じ画面位置に留まるようスクロール位置を補正する。
-document.getElementById('canvas-area').addEventListener('wheel', e => {
-  if (!e.ctrlKey && !e.metaKey) return;
+// パソコンのタッチパッドのピンチもCtrl付きのホイールとして届くので、ここで扱う。
+// 定規の上でも効くよう、定規を含むキャンバス全体（canvas-stage）で受け取る。
+document.getElementById('canvas-stage').addEventListener('wheel', e => {
+  if (!e.ctrlKey && !e.metaKey) {
+    // 定規はスクロールしない要素なので、上での2本指スクロールやホイールをキャンバスに回す
+    if (e.target.closest('.ruler, .ruler-corner')) {
+      e.preventDefault();
+      const unit = e.deltaMode === 1 ? 20 : 1;
+      canvasArea.scrollLeft += (e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX) * unit;
+      canvasArea.scrollTop += (e.shiftKey && !e.deltaX ? 0 : e.deltaY) * unit;
+    }
+    return;
+  }
   e.preventDefault();
   const delta = -e.deltaY * (e.deltaMode === 1 ? 20 : 1);
   const factor = 1 + Math.min(Math.abs(delta) * 0.002, 0.15);
