@@ -1,6 +1,8 @@
-# PixelArt
+# SuperDotEditor-KAI
 
 ブラウザで使えるドット絵エディタです。インストール不要で、パソコンでもスマホでも描けます。
+
+**▶ https://11kawauso.github.io/SuperDotEditor-KAI/**
 
 ## 主な機能
 
@@ -101,4 +103,4 @@ python dev_server.py 8123
 
 [@11Kawauso](https://x.com/11Kawauso)
 
-不具合の報告や要望は [Issues](https://github.com/11Kawauso/PixelArt/issues) へどうぞ。
+不具合の報告や要望は [Issues](https://github.com/11Kawauso/SuperDotEditor-KAI/issues) へどうぞ。

@@ -1880,7 +1880,7 @@ function exportPalette(format) {
       const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
       return `${String(r).padStart(3)} ${String(g).padStart(3)} ${String(b).padStart(3)}\t${hex.slice(1)}`;
     });
-    downloadText('palette.gpl', ['GIMP Palette', 'Name: PixelArt', 'Columns: 8', '#', ...lines, ''].join('\n'));
+    downloadText('palette.gpl', ['GIMP Palette', 'Name: SuperDotEditor-KAI', 'Columns: 8', '#', ...lines, ''].join('\n'));
   } else {
     downloadText('palette.hex', colors.map(hex => hex.slice(1)).join('\n') + '\n');
   }
