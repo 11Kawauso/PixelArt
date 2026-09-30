@@ -630,6 +630,7 @@
     btnResume.style.display = mode === 'paused' ? '' : 'none';
     btnRetryArt.style.display = g.standard ? 'none' : ''; // 本家モードのキャンバスには絵が無い
     btnKeep.disabled = !g.field.some(Boolean);
+    side.scrollTop = 0; // 重ねる画面はパネルの最上部に置いているため、スクロールしていたら戻す
     panel.style.display = '';
   }
 

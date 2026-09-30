@@ -1704,14 +1704,18 @@ body.tetris-stage .canvas-area.tetris-grabbing { cursor: grabbing; }
   font-family: 'DotGothic16', ui-monospace, 'MS Gothic', monospace;
   border-right: 4px solid #000;
   box-shadow: 6px 0 0 rgba(0,0,0,0.18);
-  overflow: hidden;
+  /* 画面の高さが足りないときは、中身を重ねずにパネルの中でスクロールさせる */
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--t-line) transparent;
   transform: translateX(-100%);
 }
 body.tetris-stage .tetris-side { display: flex; }
 body.tetris-side-in .tetris-side { animation: tetris-side-in 1s steps(6, end) forwards; }
 body.tetris-side-out .tetris-side { animation: tetris-side-out 1s steps(6, end) forwards; }
 
-.tetris-side section { display: flex; flex-direction: column; gap: clamp(6px, 1.4vh, 14px); min-height: 0; }
+.tetris-side section { display: flex; flex-direction: column; gap: clamp(6px, 1.4vh, 14px); flex-shrink: 0; }
 .tetris-title {
   font-size: clamp(18px, 2.6vw, 40px);
   letter-spacing: 0.12em;
@@ -1744,10 +1748,10 @@ body.tetris-side-out .tetris-side { animation: tetris-side-out 1s steps(6, end) 
   width: 100%;
   justify-items: center;
 }
-.tetris-previews .tetris-next-more canvas { max-width: 56px; }
+.tetris-previews .tetris-next-more canvas { max-width: min(56px, 6vh); }
 .tetris-previews canvas {
   width: 100%;
-  max-width: 120px;
+  max-width: min(120px, 13vh);
   aspect-ratio: 1;
   image-rendering: pixelated;
 }
@@ -1762,7 +1766,7 @@ body.tetris-side-out .tetris-side { animation: tetris-side-out 1s steps(6, end) 
 }
 .tetris-stat b {
   font-weight: 400;
-  font-size: clamp(16px, 2.4vw, 38px);
+  font-size: clamp(16px, min(2.4vw, 4.2vh), 38px);
   font-variant-numeric: tabular-nums;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1781,7 +1785,7 @@ body.tetris-side-out .tetris-side { animation: tetris-side-out 1s steps(6, end) 
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 2px 12px;
-  font-size: clamp(10px, 0.95vw, 14px);
+  font-size: clamp(10px, min(0.95vw, 1.7vh), 14px);
 }
 .tetris-keys dt { color: var(--t-accent); }
 .tetris-keys dd { color: var(--t-text); }
