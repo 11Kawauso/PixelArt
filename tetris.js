@@ -323,19 +323,75 @@
   function renderPiece() {
     const ctx = g.pieceCtx;
     ctx.clearRect(0, 0, g.w, g.h);
+    renderGhost();
     const c = g.cur;
     if (!c) return;
-    const cells = SHAPES[c.type][c.rot];
-    const gy = ghostY();
     ctx.fillStyle = c.color.hex;
-    ctx.globalAlpha = 0.25;
-    for (const [dx, dy] of cells) if (gy + dy >= 0) ctx.fillRect(c.x + dx, gy + dy, 1, 1);
-    ctx.globalAlpha = 1;
-    for (const [dx, dy] of cells) if (c.y + dy >= 0) ctx.fillRect(c.x + dx, c.y + dy, 1, 1);
+    for (const [dx, dy] of SHAPES[c.type][c.rot]) if (c.y + dy >= 0) ctx.fillRect(c.x + dx, c.y + dy, 1, 1);
+  }
+
+  // 色を暗くする（f=0.5なら明るさ半分）
+  function shadeHex(hex, f) {
+    return '#' + [1, 3, 5].map(i =>
+      Math.round(parseInt(hex.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')
+    ).join('');
+  }
+
+  // 落下位置の表示（ゴースト）。盤面のキャンバスは1マス=1ピクセルでマスの中に線を
+  // 引けないため、ゴーストの範囲だけを覆う専用の小さなキャンバスに、1マスを
+  // GHOST_PXピクセルで描く。ブロックの色を暗くした斜線と外周の線で、はっきり見せる。
+  const GHOST_PX = 10;
+  const GHOST_STRIPE = 5; // 斜線の間隔（1マスに2本）
+  function renderGhost() {
+    const cv = g.ghostCanvas;
+    const c = g.cur;
+    const gy = c ? ghostY() : 0;
+    const cells = c
+      ? SHAPES[c.type][c.rot].map(([dx, dy]) => [c.x + dx, gy + dy]).filter(([, y]) => y >= 0)
+      : [];
+    if (!cells.length) { cv.style.display = 'none'; return; }
+
+    const xs = cells.map(p => p[0]), ys = cells.map(p => p[1]);
+    const minX = Math.min(...xs), minY = Math.min(...ys);
+    const bw = Math.max(...xs) - minX + 1, bh = Math.max(...ys) - minY + 1;
+    cv.width = bw * GHOST_PX;
+    cv.height = bh * GHOST_PX;
+    Object.assign(cv.style, {
+      display: '',
+      left: `${minX / g.w * 100}%`,
+      top: `${minY / g.h * 100}%`,
+      width: `${bw / g.w * 100}%`,
+      height: `${bh / g.h * 100}%`,
+    });
+
+    const ctx = cv.getContext('2d');
+    const filled = new Set(cells.map(([x, y]) => `${x},${y}`));
+    const P = GHOST_PX;
+    for (const [x, y] of cells) {
+      const ox = (x - minX) * P, oy = (y - minY) * P;
+      // 薄い下地
+      ctx.globalAlpha = 0.2;
+      ctx.fillStyle = c.color.hex;
+      ctx.fillRect(ox, oy, P, P);
+      ctx.globalAlpha = 1;
+      // 斜線（キャンバス全体の座標で引くので、隣のマスとつながった線になる）
+      ctx.fillStyle = shadeHex(c.color.hex, 0.55);
+      for (let py = 0; py < P; py++) {
+        for (let px = 0; px < P; px++) {
+          if ((ox + px + oy + py) % GHOST_STRIPE === 0) ctx.fillRect(ox + px, oy + py, 1, 1);
+        }
+      }
+      // 外周の線（隣がゴーストでない辺だけ）
+      if (!filled.has(`${x},${y - 1}`)) ctx.fillRect(ox, oy, P, 1);
+      if (!filled.has(`${x},${y + 1}`)) ctx.fillRect(ox, oy + P - 1, P, 1);
+      if (!filled.has(`${x - 1},${y}`)) ctx.fillRect(ox, oy, 1, P);
+      if (!filled.has(`${x + 1},${y}`)) ctx.fillRect(ox + P - 1, oy, 1, P);
+    }
   }
 
   // 揃った行を白く光らせる。昔のゲームらしく、なめらかに消さず3段階で明るさを変える
   function renderFlash(t) {
+    g.ghostCanvas.style.display = 'none';
     const ctx = g.pieceCtx;
     ctx.clearRect(0, 0, g.w, g.h);
     ctx.fillStyle = '#ffffff';
@@ -627,7 +683,7 @@
   function gameOver() {
     g.state = 'over';
     g.cur = null;
-    g.pieceCtx.clearRect(0, 0, g.w, g.h);
+    renderPiece(); // 落下中のブロックとゴーストを消す
     showPanel(`GAME OVER\nSCORE ${g.score.toLocaleString()}`, 'over');
   }
 
@@ -651,8 +707,8 @@
       }
     }
     g.fieldCtx.putImageData(g.fieldImg, 0, 0);
-    g.pieceCtx.clearRect(0, 0, w, h);
     g.cur = null;
+    renderPiece();
     g.clearing = null;
     g.bag = [];
     g.score = 0;
@@ -741,9 +797,13 @@
     switchLayout(() => body.classList.add('tetris-stage'));
     const fieldCanvas = makeLayerCanvas();
     const pieceCanvas = makeLayerCanvas();
-    cMain.after(fieldCanvas, pieceCanvas);
+    const ghostCanvas = document.createElement('canvas');
+    ghostCanvas.className = 'tetris-ghost';
+    ghostCanvas.style.display = 'none';
+    // ゴーストは落下中のブロックの下に来るよう、その前に置く（着地寸前で重なったときはブロックが見える）
+    cMain.after(fieldCanvas, ghostCanvas, pieceCanvas);
     Object.assign(g, {
-      fieldCanvas, pieceCanvas,
+      fieldCanvas, pieceCanvas, ghostCanvas,
       fieldCtx: fieldCanvas.getContext('2d'),
       pieceCtx: pieceCanvas.getContext('2d'),
     });
@@ -819,6 +879,7 @@
     // ②の逆：盤面を片付けてエディタの配置に戻す（描いた絵がまた見えるようになる）
     g.fieldCanvas.remove();
     g.pieceCanvas.remove();
+    g.ghostCanvas.remove();
     switchLayout(() => body.classList.remove('tetris-stage', 'tetris-side-out'));
 
     // ①の逆：消えていた部品を戻す

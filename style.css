@@ -1604,6 +1604,13 @@ a.menu-item:hover { background: var(--bg); }
   pointer-events: none;
   image-rendering: pixelated;
 }
+/* 落下位置の表示。位置と大きさ（盤面に対する割合）はtetris.jsが指定する */
+.tetris-ghost {
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
 
 /* 遊んでいる間（出入りの演出中も含む）はキャンバスに描けず、エディタも操作できない */
 body.tetris-playing #canvas-overlay { visibility: hidden; pointer-events: none; }
