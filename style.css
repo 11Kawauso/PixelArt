@@ -1817,6 +1817,21 @@ body.tetris-side-out .tetris-side { animation: tetris-side-out 1s steps(6, end) 
 .tetris-side button.primary:hover { background: #ffe07a; }
 .tetris-side button:disabled { opacity: 0.4; }
 
+/* モード選択。選んでいる方（フォーカス中）に昔のゲーム風の▶カーソルを出す */
+.tetris-side .tetris-mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  padding: 10px 12px;
+}
+.tetris-mode-btn b { font-weight: 400; font-size: clamp(16px, 1.6vw, 22px); color: var(--t-accent); }
+.tetris-mode-btn span { font-size: clamp(11px, 1vw, 13px); }
+.tetris-mode-btn small { font-size: clamp(10px, 0.85vw, 12px); color: var(--t-muted); line-height: 1.5; }
+.tetris-side .tetris-mode-btn.is-selected { outline: 2px solid var(--t-accent); outline-offset: 2px; }
+.tetris-mode-btn.is-selected b::before { content: '▶ '; }
+
 /* タッチ端末ではキー説明の代わりに操作ボタンを出す */
 .tetris-pad { display: none; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .tetris-pad button { aspect-ratio: 1; min-height: 0; padding: 0; font-size: 18px; touch-action: none; }
@@ -1862,3 +1877,6 @@ body.tetris-side-out .tetris-side { animation: tetris-side-out 1s steps(6, end) 
    準備ができるまでページを隠し、エディタの部品を消す演出も省く（サイドパネルの登場だけは見せる） */
 html.tetris-direct body { visibility: hidden; }
 body.tetris-instant *:not(.tetris-side) { animation-duration: 0s !important; }
+/* 本家設定で遊ぶときは、盤面を市松模様ではなく白一色にする */
+body.tetris-plain #canvas-bg { visibility: hidden; }
+body.tetris-plain #canvas-wrap { background: #ffffff; }

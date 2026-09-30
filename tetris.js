@@ -97,7 +97,14 @@
   const NEXT_COUNT = 3;        // 先に見せるブロックの数
   const SOFT_DROP_INTERVAL = 16;
   const LOCK_DELAY = 500;      // 着地してから固定されるまでの猶予
-  const MAX_LOCK_RESETS = 15;  // 着地後に動かして猶予を延ばせる回数
+  const MAX_LOCK_RESETS = 15;  // ノーマルモードで、着地後に動かして猶予を延ばせる回数
+
+  // ルールの違い
+  //   normal … 本家（ガイドライン）と同じ。着地後も動かせば猶予が延び（15回まで）、
+  //            ゆっくり落とすと1段1点、一気に落とすと1段2点も入る
+  //   hard   … このサイト独自。着地後の猶予は延びず、得点はライン消去のみ
+  const MODE_LABELS = { normal: 'NORMAL', hard: 'HARD' };
+  const MODE_KEY = 'pixelart-tetris-mode'; // 前回選んだモードを覚えておく
   const FLASH_MS = 260;        // 揃った行が光ってから消えるまで
   const LINE_SCORES = [0, 100, 300, 500, 800];
   const LINE_NAMES = ['', 'SINGLE', 'DOUBLE', 'TRIPLE', 'TETRIS!'];
@@ -119,6 +126,8 @@
   const colorsEl = document.getElementById('tetris-colors');
   const nextCanvases = ['tetris-next', 'tetris-next2', 'tetris-next3'].map(id => document.getElementById(id));
   const holdCanvas = document.getElementById('tetris-hold');
+  const modePanel = document.getElementById('tetris-mode-panel');
+  const modeBtns = [...modePanel.querySelectorAll('.tetris-mode-btn')];
   const panel = document.getElementById('tetris-panel');
   const panelTitle = document.getElementById('tetris-panel-title');
   const btnPause = document.getElementById('btn-tetris-pause');
@@ -194,6 +203,7 @@
     };
     g.lockAt = null;
     g.lockResets = 0;
+    g.lowestY = g.cur.y; // これまでで一番下まで落ちた位置
     g.lastFall = performance.now();
     if (collides(g.cur.type, g.cur.rot, g.cur.x, g.cur.y)) {
       gameOver();
@@ -208,9 +218,21 @@
     updateHud();
   }
 
-  // 着地中に動かせたら、固定までの猶予を延ばす
+  // これまでより下の段まで落ちたとき（段差から落ちた、回転で下にずれたなど）は、
+  // 新しく着地したものとして猶予を最初から数え直す
+  function updateLowest() {
+    if (g.cur.y > g.lowestY) {
+      g.lowestY = g.cur.y;
+      g.lockAt = null;
+      g.lockResets = 0;
+    }
+  }
+
+  // 着地後に動かしたとき、ノーマルモードでは猶予を延ばす（15回まで）。
+  // ハードモードでは延ばさない（下に着いたまま動き続けられないように）
   function afterMove() {
-    if (g.lockAt !== null && g.lockResets < MAX_LOCK_RESETS) {
+    updateLowest();
+    if (g.mode === 'normal' && g.lockAt !== null && g.lockResets < MAX_LOCK_RESETS) {
       g.lockAt = performance.now() + LOCK_DELAY;
       g.lockResets++;
     }
@@ -247,9 +269,11 @@
     return y;
   }
 
-  // 得点は横一列が揃ったときだけ入る（落とし方では点を付けない）
+  // ノーマルモードでは落とした段数×2点が入る（ハードモードは横一列が揃ったときだけ）
   function hardDrop() {
-    g.cur.y = ghostY();
+    const y = ghostY();
+    if (g.mode === 'normal') g.score += (y - g.cur.y) * 2;
+    g.cur.y = y;
     lockPiece();
   }
 
@@ -531,11 +555,15 @@
       if (g.lockAt === null) g.lockAt = now + LOCK_DELAY;
       else if (now >= g.lockAt) lockPiece();
     } else {
-      g.lockAt = null;
+      // 回転の壁蹴りなどで一瞬浮いても猶予は止めずに減らし続ける（浮かせて粘れないように）。
+      // 猶予が切れた状態で再び着地すると、その場で固定される
       const interval = g.held.down ? Math.min(SOFT_DROP_INTERVAL, fallInterval()) : fallInterval();
       if (now - g.lastFall >= interval) {
         c.y++;
         g.lastFall = now;
+        updateLowest();
+        // ノーマルモードでは、ゆっくり落とした1段ごとに1点
+        if (g.held.down && g.mode === 'normal') { g.score++; updateHud(); }
         g.dirty = true;
       }
     }
@@ -590,6 +618,14 @@
       e.preventDefault();
       if (g.state === 'playing') pause();
       else if (g.state === 'paused') resume();
+      return;
+    }
+    // モード選択中は↑↓で選び、Enter・Spaceで決定（決定はボタン本来の動作に任せる）
+    if (g.state === 'select' && ['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS'].includes(e.code)) {
+      e.preventDefault();
+      const i = modeBtns.findIndex(b => b.classList.contains('is-selected'));
+      const dir = e.code === 'ArrowUp' || e.code === 'KeyW' ? -1 : 1;
+      selectModeBtn(modeBtns[(i + dir + modeBtns.length) % modeBtns.length]);
       return;
     }
     if (g.state !== 'playing') return; // ポーズ中などはパネルのボタン操作（Enter・Space）を妨げない
@@ -669,13 +705,15 @@
   function pause() {
     g.state = 'paused';
     g.held = { left: 0, right: 0, down: 0 };
+    // 着地後の残り猶予を覚えておく（ポーズを繰り返して猶予を延ばせないように）
+    g.lockRemain = g.lockAt !== null ? Math.max(0, g.lockAt - performance.now()) : null;
     showPanel('PAUSE', 'paused');
   }
 
   function resume() {
     g.state = 'playing';
     g.lastFall = performance.now();
-    if (g.lockAt !== null) g.lockAt = performance.now() + LOCK_DELAY;
+    if (g.lockAt !== null) g.lockAt = performance.now() + g.lockRemain;
     hidePanel();
     if (document.activeElement) document.activeElement.blur(); // Spaceでボタンが押されないように
   }
@@ -744,8 +782,53 @@
     return cv;
   }
 
+  // ── モード ──
+  function loadMode() {
+    try {
+      const m = localStorage.getItem(MODE_KEY);
+      if (m in MODE_LABELS) return m;
+    } catch (err) { /* 読めなければノーマルにする */ }
+    return 'normal';
+  }
+
+  function setMode(mode) {
+    g.mode = mode;
+    try { localStorage.setItem(MODE_KEY, mode); } catch (err) { /* 覚えられなくても遊ぶのに支障はない */ }
+    elSize.textContent = `${g.w}×${g.h} · ${MODE_LABELS[mode]}`;
+  }
+
+  // モード選択画面を出し、選ばれたモードで解決するPromiseを返す
+  function chooseMode() {
+    g.state = 'select';
+    side.scrollTop = 0; // 重ねる画面はパネルの最上部に置いているため
+    modePanel.style.display = '';
+    selectModeBtn(modeBtns.find(b => b.dataset.mode === g.mode) || modeBtns[0]);
+    return new Promise(resolve => { g.resolveMode = resolve; });
+  }
+
+  // ▶カーソルを付けてフォーカスする（:focusはウィンドウが非アクティブだと
+  // 効かないことがあるため、見た目はクラスで付ける）
+  function selectModeBtn(b) {
+    modeBtns.forEach(o => o.classList.toggle('is-selected', o === b));
+    b.focus();
+  }
+
+  modeBtns.forEach(b => {
+    b.addEventListener('pointerenter', () => selectModeBtn(b)); // マウスを乗せた方に▶カーソルを移す
+    b.addEventListener('focus', () => selectModeBtn(b));        // Tabキーで移ったとき
+    b.addEventListener('click', () => {
+      if (!g || g.state !== 'select') return;
+      modePanel.style.display = 'none';
+      b.blur(); // 遊んでいる間のSpaceでボタンが押されないように
+      setMode(b.dataset.mode);
+      const resolve = g.resolveMode;
+      g.resolveMode = null;
+      resolve(b.dataset.mode);
+    });
+  });
+
   function fillSidePanel() {
-    elSize.textContent = `${g.w}×${g.h}`;
+    setMode(g.mode);
     colorsEl.innerHTML = '';
     g.palette.forEach(hex => {
       const sw = document.createElement('i');
@@ -779,6 +862,7 @@
     g = {
       state: 'intro',
       standard, direct,
+      mode: loadMode(),
       w: cols, h: rows,
       extras: !standard && cols >= EXTRA_MIN_SIZE && rows >= EXTRA_MIN_SIZE,
       palette: standard ? [] : customColors.filter(Boolean),
@@ -795,6 +879,7 @@
 
     // ② キャンバスエリアを画面いっぱいにして盤面を用意する
     switchLayout(() => body.classList.add('tetris-stage'));
+    body.classList.toggle('tetris-plain', standard);
     const fieldCanvas = makeLayerCanvas();
     const pieceCanvas = makeLayerCanvas();
     const ghostCanvas = document.createElement('canvas');
@@ -823,6 +908,7 @@
       sleep(SIDE_MS),
     ]);
 
+    await chooseMode();
     showMessage('READY', 0);
     await sleep(700);
     showMessage('GO!', 800);
@@ -880,7 +966,7 @@
     g.fieldCanvas.remove();
     g.pieceCanvas.remove();
     g.ghostCanvas.remove();
-    switchLayout(() => body.classList.remove('tetris-stage', 'tetris-side-out'));
+    switchLayout(() => body.classList.remove('tetris-stage', 'tetris-side-out', 'tetris-plain'));
 
     // ①の逆：消えていた部品を戻す
     body.classList.remove('tetris-out', 'tetris-instant');
@@ -898,6 +984,12 @@
   btnResume.addEventListener('click', () => { if (g && g.state === 'paused') resume(); });
   document.getElementById('btn-tetris-retry').addEventListener('click', () => { if (g) retry(false); });
   document.getElementById('btn-tetris-retry-art').addEventListener('click', () => { if (g) retry(true); });
+  document.getElementById('btn-tetris-change-mode').addEventListener('click', async () => {
+    if (!g || (g.state !== 'paused' && g.state !== 'over')) return;
+    hidePanel();
+    await chooseMode();
+    retry(false);
+  });
   btnKeep.addEventListener('click', () => closeGame(true));
   document.getElementById('btn-tetris-quit').addEventListener('click', () => closeGame(false));
 

@@ -631,12 +631,30 @@
     <button id="btn-tetris-pause" class="tetris-pause-btn">⏸ ポーズ</button>
   </section>
 
+  <!-- 始める前のモード選択（サイドパネルの上に重ねる） -->
+  <div class="tetris-panel" id="tetris-mode-panel" style="display:none">
+    <div class="tetris-panel-card">
+      <p>MODE SELECT</p>
+      <button class="tetris-mode-btn" data-mode="normal">
+        <b>NORMAL</b>
+        <span>本家と同じルール</span>
+        <small>着地しても少しの間動かせる<br>落とした距離でも得点が入る</small>
+      </button>
+      <button class="tetris-mode-btn" data-mode="hard">
+        <b>HARD</b>
+        <span>このサイトの独自ルール</span>
+        <small>着地したら0.5秒で固定<br>得点はライン消去のみ</small>
+      </button>
+    </div>
+  </div>
+
   <!-- ポーズ・ゲームオーバー時にサイドパネルの上に重ねる -->
   <div class="tetris-panel" id="tetris-panel" style="display:none">
     <div class="tetris-panel-card">
       <p id="tetris-panel-title"></p>
       <button id="btn-tetris-resume" class="primary">▶ 再開</button>
       <button id="btn-tetris-retry" class="primary">🔁 もう一度</button>
+      <button id="btn-tetris-change-mode">🔀 モードを変えてもう一度</button>
       <button id="btn-tetris-retry-art">🧱 今の絵を足場にしてもう一度</button>
       <button id="btn-tetris-keep">🖼 盤面をレイヤーに残して終了</button>
       <button id="btn-tetris-quit">✕ 終了</button>
