@@ -56,6 +56,9 @@
       <button id="btn-login" class="menu-item">G ログイン</button>
 
       <div class="menu-divider"></div>
+      <button id="btn-tetris" class="menu-item">🎮 このサイズでテトリス</button>
+
+      <div class="menu-divider"></div>
       <a class="menu-item" href="terms.html" target="_blank" rel="noopener">📄 利用規約</a>
       <a class="menu-item" href="privacy.html" target="_blank" rel="noopener">🔒 プライバシーポリシー</a>
     </div>
@@ -565,7 +568,67 @@
 <!-- 通知トースト -->
 <div class="cloud-toast" id="cloud-toast" style="display:none"></div>
 
+<!-- テトリス（今のキャンバスサイズがそのまま盤面になる） -->
+<div class="confirm-modal" id="tetris-start-modal" style="display:none">
+  <div class="confirm-card tetris-start-card">
+    <p>🎮 <b id="tetris-start-size"></b> のテトリス</p>
+    <div class="layer-hint" id="tetris-start-note"></div>
+    <label class="detect-line-label">
+      <input type="checkbox" id="tetris-use-art" style="accent-color:var(--accent)">
+      今の絵を足場にする
+    </label>
+    <div class="confirm-actions">
+      <button id="btn-tetris-start" class="primary">スタート</button>
+      <button id="btn-tetris-cancel">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div class="tetris-hud" id="tetris-hud">
+  <div class="tetris-hud-head">🎮 テトリス <span id="tetris-size"></span></div>
+  <div class="tetris-stats">
+    <div><span>スコア</span><b id="tetris-score">0</b></div>
+    <div><span>ライン</span><b id="tetris-lines">0</b></div>
+    <div><span>レベル</span><b id="tetris-level">1</b></div>
+  </div>
+  <div class="tetris-previews">
+    <div><span>ネクスト</span><canvas id="tetris-next" width="8" height="8"></canvas></div>
+    <div><span>ホールド</span><canvas id="tetris-hold" width="8" height="8"></canvas></div>
+  </div>
+  <div class="tetris-msg" id="tetris-msg"></div>
+  <div class="tetris-note" id="tetris-note"></div>
+  <div class="tetris-keys">
+    ←→ 移動 ／ ↓ ソフトドロップ<br>
+    Space ハードドロップ ／ C ホールド<br>
+    ↑・X 右回転 ／ Z 左回転 ／ Esc 一時停止
+  </div>
+  <button id="btn-tetris-pause" class="tetris-pause-btn">⏸ 一時停止</button>
+  <div class="tetris-panel" id="tetris-panel" style="display:none">
+    <p id="tetris-panel-title"></p>
+    <button id="btn-tetris-resume" class="primary">▶ 再開</button>
+    <button id="btn-tetris-retry" class="primary">🔁 もう一度</button>
+    <button id="btn-tetris-keep">🖼 盤面をレイヤーに残して終了</button>
+    <button id="btn-tetris-quit" class="danger">終了</button>
+  </div>
+</div>
+
+<!-- テトリスのタッチ操作用ボタン（タッチ端末のみ表示） -->
+<div class="tetris-pad" id="tetris-pad">
+  <div class="tetris-pad-group">
+    <button data-act="left">◀</button>
+    <button data-act="down">▼</button>
+    <button data-act="right">▶</button>
+  </div>
+  <div class="tetris-pad-group">
+    <button data-act="hold">HOLD</button>
+    <button data-act="ccw">⟲</button>
+    <button data-act="cw">⟳</button>
+    <button data-act="drop">⤓</button>
+  </div>
+</div>
+
 <script src="script.js"></script>
+<script src="tetris.js"></script>
 <script type="module" src="cloud.js"></script>
 </body>
 </html>
