@@ -71,6 +71,21 @@
   .legal-links a { color: var(--text-muted); text-decoration: none; }
   .legal-links a:hover { color: var(--text); text-decoration: underline; }
 
+  /* 広告（忍者AdMax 300x250）。読み込み前後でレイアウトがずれないよう、枠の大きさを先に確保する */
+  .ad {
+    margin-top: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .ad-label { font-size: 10px; color: var(--text-muted); letter-spacing: 0.1em; }
+  .ad-slot {
+    width: 300px;
+    height: 250px;
+    overflow: hidden;
+  }
+
   /* 画面の左下・右下の端 */
   .corner {
     position: fixed;
@@ -116,6 +131,15 @@
   <a href="terms.html">利用規約</a>
   <a href="privacy.html">プライバシーポリシー</a>
 </nav>
+
+<aside class="ad" aria-label="広告">
+  <div class="ad-label">広告</div>
+  <div class="ad-slot">
+    <!-- admax -->
+    <script src="https://adm.shinobi.jp/s/a5629ae4dbe883a2c988743117958628"></script>
+    <!-- admax -->
+  </div>
+</aside>
 
 <a class="corner credit" href="https://x.com/11Kawauso" target="_blank" rel="noopener">
   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
