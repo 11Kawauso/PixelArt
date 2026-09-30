@@ -1645,8 +1645,14 @@ body.tetris-out .statusbar { animation: tetris-out-down 1.2s steps(6, end) forwa
 /* スマホで閉じているパネルは元々画面外なので動かさない */
 body.tetris-out .panel:not(.collapsed),
 body.tetris-out .layer-dock { animation: tetris-out-left 1.2s steps(6, end) forwards; }
+/* パネルの開閉ボタンとリサイズハンドルはパネルの端に付いているので、パネルと一緒に動かない
+   フェードだと、パネルから離れて浮いて見える。消えるときは最初に消し、戻るときは
+   パネルが戻りきってから出す（戻る演出の間はずっと隠しておく） */
+@keyframes tetris-hide { from, to { opacity: 0; visibility: hidden; } }
 body.tetris-out .panel-toggle,
 body.tetris-out .panel-resize,
+body.tetris-return .panel-toggle,
+body.tetris-return .panel-resize { animation: tetris-hide 1.2s forwards; }
 body.tetris-out .zoom-controls,
 body.tetris-out .color-history,
 body.tetris-out .shape-menu,
@@ -1661,8 +1667,6 @@ body.tetris-return header { animation: tetris-back-down 1.2s steps(6, end); }
 body.tetris-return .statusbar { animation: tetris-back-up 1.2s steps(6, end); }
 body.tetris-return .panel:not(.collapsed),
 body.tetris-return .layer-dock { animation: tetris-back-right 1.2s steps(6, end); }
-body.tetris-return .panel-toggle,
-body.tetris-return .panel-resize,
 body.tetris-return .zoom-controls,
 body.tetris-return .color-history,
 body.tetris-return .shape-menu,

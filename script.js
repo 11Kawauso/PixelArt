@@ -3860,9 +3860,11 @@ function syncTogglePosition() {
     // パネルはトランジション中のため、実測値ではなく指定済みの目標幅を使う
     const w = panelCollapsed ? 0 : (parseFloat(panel.style.width) || panel.getBoundingClientRect().width);
     const handleW = panelCollapsed ? 0 : 4;
-    // レイヤードックを開いている場合はその幅も左端に加算する
+    // レイヤードックを開いている場合は、パネル・リサイズハンドル・ドックの右端に付ける。
+    // 開いていない場合はパネルの枠線にぴったり付ける（リサイズハンドルは透明なので、
+    // その幅を足すとボタンがパネルから離れて見える。ハンドルの上に重なってもボタンが上に来る）
     const dockW = layersDocked ? layerDock.getBoundingClientRect().width : 0;
-    const edge = w + handleW + dockW;
+    const edge = layersDocked ? w + handleW + dockW : w;
     panelToggle.style.left = edge + 'px';
     panelBackdrop.classList.remove('visible');
     updateColorHistoryPos(edge);
