@@ -1,4 +1,4 @@
-// ── テトリス ──────────────────────────────────────────
+// ── PEPORIS（テトリス風の落ち物パズル） ─────────────────
 // 今のキャンバスサイズがそのまま盤面になるネタ機能。
 // サイズは自由に変えられるので、やろうと思えば横1000マス以上のテトリスもできる。
 // ブロックの色はカスタムカラーに色があればその中から選び、無ければランダムな色にする。
@@ -107,7 +107,7 @@
   const MODE_KEY = 'pixelart-tetris-mode'; // 前回選んだモードを覚えておく
   const FLASH_MS = 260;        // 揃った行が光ってから消えるまで
   const LINE_SCORES = [0, 100, 300, 500, 800];
-  const LINE_NAMES = ['', 'SINGLE', 'DOUBLE', 'TRIPLE', 'TETRIS!'];
+  const LINE_NAMES = ['', 'SINGLE', 'DOUBLE', 'TRIPLE', 'PEPORIS!']; // 4列同時はゲーム名で祝う
 
   // 画面の出入りの演出（CSSのアニメーション時間と合わせる）
   const UI_OUT_MS = 1200;      // エディタの部品が消える／戻る
@@ -921,7 +921,7 @@
     pushHistory();
     addLayerAboveActive();
     const layer = layers[activeLayerIndex];
-    layer.name = 'テトリス';
+    layer.name = 'PEPORIS';
     for (let r = 0; r < g.h; r++) {
       const row = layer.cells[r];
       for (let c = 0; c < g.w; c++) {

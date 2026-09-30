@@ -42,8 +42,27 @@ header {
 }
 header h1 { font-size: 14px; font-weight: 500; letter-spacing: 0.02em; }
 /* タイトルはホーム画面へのリンク。見た目は見出しのまま、触れたときだけ下線を出す */
-.home-link { color: inherit; text-decoration: none; }
+/* サイト名は場所が足りなくなると、正式名 →「超.田・改」→ アイコン の順に切り替える
+   （どれを出すかはscript.jsのfitSiteTitleが、実際に収まるかを測って決める） */
+header h1 { white-space: nowrap; min-width: 0; }
+.home-link { color: inherit; text-decoration: none; display: flex; align-items: center; min-width: 0; }
+.home-name { overflow: hidden; text-overflow: ellipsis; }
 .home-link:hover { text-decoration: underline; }
+.home-name-short,
+.home-icon { display: none; }
+.home-icon {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+header h1.name-short .home-name-full { display: none; }
+header h1.name-short .home-name-short { display: block; }
+header h1.name-icon .home-name { display: none; }
+header h1.name-icon .home-icon { display: block; }
+/* fitSiteTitleが測る一瞬だけ、ヘッダーの中身を縮めない状態にする */
+header.measuring > *,
+header.measuring .status-chip > span { flex-shrink: 0 !important; }
 .header-sep { flex: 1; }
 
 /* 背景切替 */

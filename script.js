@@ -2674,6 +2674,31 @@ function updateHeaderStatus() {
   statusTool.title = `今のツール: ${tool}`;
 }
 
+// ヘッダーのサイト名は、場所が足りなくなると
+// 正式名「スーパードットエディター・改」→ 略称「超.田・改」→ アイコン の順に切り替える。
+// 空き具合は隣の状態表示（レイヤー名の長さなど）でも変わるため、画面幅で決め打ちせず、
+// ヘッダーの中身を縮めずに並べたときに収まるかを実際に測って決める。
+// （状態表示は今のレイヤーやツールが分かる大事な表示なので、サイト名の方を先に譲る）
+const headerEl = document.querySelector('header');
+const siteTitle = headerEl.querySelector('h1');
+function headerOverflows() {
+  headerEl.classList.add('measuring'); // 一時的に何も縮めない状態にして測る
+  const over = headerEl.scrollWidth > headerEl.clientWidth;
+  headerEl.classList.remove('measuring');
+  return over;
+}
+function fitSiteTitle() {
+  siteTitle.classList.remove('name-short', 'name-icon');
+  if (!headerOverflows()) return;
+  siteTitle.classList.add('name-short');
+  if (!headerOverflows()) return;
+  siteTitle.classList.replace('name-short', 'name-icon');
+}
+// ヘッダーの幅（画面幅）と状態表示の幅のどちらが変わっても測り直す
+const siteTitleObserver = new ResizeObserver(fitSiteTitle);
+siteTitleObserver.observe(headerEl);
+siteTitleObserver.observe(statusChip);
+
 function updateCanvasCursor() {
   cOv.style.cursor = currentTool === 'move' ? 'move' : '';
   // スポイト中は参考画像の上でも色を取れることが分かるようにする

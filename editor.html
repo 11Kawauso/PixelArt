@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>ドット絵エディタ</title>
+<title>スーパードットエディター・改</title>
 <link rel="icon" href="images/pixel-art_icon.png" type="image/png">
 <link rel="stylesheet" href="style.css">
 <script>
@@ -16,7 +16,7 @@
 
 <!-- ヘッダー -->
 <header>
-  <h1><a class="home-link" href="index.html" title="ホームへ">ドット絵エディタ</a></h1>
+  <h1><a class="home-link" href="index.html" title="ホームへ"><img class="home-icon" src="images/pixel-art_icon.png" alt="スーパードットエディター・改"><span class="home-name home-name-full">スーパードットエディター・改</span><span class="home-name home-name-short" title="スーパードットエディター・改（超＝スーパー、.＝ドット、田＝エディター画面のマス目）">超.田・改</span></a></h1>
   <span class="artwork-chip" id="artwork-chip" style="display:none" title="開いているクラウド作品">📄 <span id="artwork-chip-name"></span></span>
   <!-- 描画中のレイヤーと、今のツール（筆の状態） -->
   <span class="status-chip" id="status-chip" style="display:none">
@@ -496,7 +496,7 @@
 
 <!-- ズーム（画面右下固定） -->
 <div class="zoom-controls">
-  <button id="btn-tetris" class="tetris-start-btn" title="今のキャンバスサイズでテトリス">
+  <button id="btn-tetris" class="tetris-start-btn" title="今のキャンバスサイズでPEPORIS">
     <svg width="15" height="10" viewBox="0 0 32 21" aria-hidden="true" shape-rendering="crispEdges">
       <g fill="#8e44ad">
         <rect x="0" y="0" width="10" height="10"/><rect x="11" y="0" width="10" height="10"/>
@@ -581,7 +581,7 @@
 <!-- テトリス画面のサイドパネル（遊んでいる間だけ左から出てくる） -->
 <aside class="tetris-side" id="tetris-side">
   <section class="tetris-side-top">
-    <div class="tetris-title">TETRIS <span id="tetris-size"></span></div>
+    <div class="tetris-title">PEPORIS <span id="tetris-size"></span></div>
     <div class="tetris-box" id="tetris-colors-box">
       <div class="tetris-label">COLORS</div>
       <div class="tetris-colors" id="tetris-colors"></div>
