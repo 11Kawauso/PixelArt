@@ -132,6 +132,16 @@
       </label>
     </div>
 
+    <!-- 移動の対象（移動ツールのときだけ表示） -->
+    <div class="panel-section" id="move-target-section" style="display:none">
+      <div class="panel-label">移動の対象</div>
+      <div class="tool-grid">
+        <button class="move-target-btn active" data-all="0" title="描画中のレイヤーだけを動かします">このレイヤー</button>
+        <button class="move-target-btn" data-all="1" title="ロックされていない全レイヤーをまとめて動かします">全レイヤー</button>
+      </div>
+      <div class="layer-hint">選択範囲があれば、その範囲だけを動かします</div>
+    </div>
+
     <!-- 描画サイズ -->
     <div class="panel-section">
       <div class="panel-label">描画サイズ</div>

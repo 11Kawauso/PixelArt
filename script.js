@@ -173,7 +173,7 @@ function syncActiveCells() {
   activeLayerIndex = Math.max(0, Math.min(layers.length - 1, activeLayerIndex));
   cells = layers[activeLayerIndex].cells;
   // 別のレイヤーに切り替えたら、移動中の選択範囲はその位置で確定する
-  if (floating && floating.layer !== layers[activeLayerIndex]) floating = null;
+  if (floating && floating.activeLayer !== layers[activeLayerIndex]) floating = null;
 }
 
 function initCells(c, r, keepOld) {
@@ -1132,12 +1132,16 @@ cOv.addEventListener('touchend', e => {
 });
 cOv.addEventListener('touchcancel', () => cancelSingleTouchGesture());
 
-// ── ピンチで拡大縮小（キャンバスの上でも、周りの余白でも） ──
-// キャンバス上のタッチもここまで伝わってくるので、2本指の操作はすべてここで扱う。
-canvasArea.addEventListener('touchstart', e => {
+// ── ピンチで拡大縮小（キャンバスの上でも、周りの余白や定規の上でも） ──
+// キャンバスや定規の上のタッチもここまで伝わってくるので、2本指の操作はすべてここで扱う。
+const pinchArea = document.getElementById('canvas-stage');
+pinchArea.addEventListener('touchstart', e => {
   if (e.touches.length < 2) return;
   e.preventDefault(); // ブラウザによるページ全体の拡大縮小を止める
-  if (!isPinching) cancelSingleTouchGesture();
+  if (!isPinching) {
+    cancelSingleTouchGesture();
+    cancelRulerDrag(); // 定規の上でピンチを始めたときに、1本目で選んだ強調を取り消す
+  }
   isPinching = true;
   pinchStartDist = getTouchDist(e) || 1;
   pinchStartZoom = zoom;
@@ -1147,7 +1151,7 @@ canvasArea.addEventListener('touchstart', e => {
   pinchContentY = (ctr.y - wrapRect.top) / pinchStartZoom;
 }, {passive: false});
 
-canvasArea.addEventListener('touchmove', e => {
+pinchArea.addEventListener('touchmove', e => {
   if (!isPinching || e.touches.length < 2) return;
   e.preventDefault();
   const dist = getTouchDist(e);
@@ -1171,8 +1175,14 @@ canvasArea.addEventListener('touchmove', e => {
 function endPinchIfAllLifted(e) {
   if (e.touches.length === 0) isPinching = false;
 }
-canvasArea.addEventListener('touchend', endPinchIfAllLifted);
-canvasArea.addEventListener('touchcancel', endPinchIfAllLifted);
+pinchArea.addEventListener('touchend', endPinchIfAllLifted);
+pinchArea.addEventListener('touchcancel', endPinchIfAllLifted);
+
+// 上記以外の場所（ヘッダーやボタンの上など）で2本指を動かしても、
+// ページ全体が拡大縮小されないようにする
+document.addEventListener('touchmove', e => {
+  if (e.touches.length > 1) e.preventDefault();
+}, {passive: false});
 
 // iPhone・iPadのSafariは独自のピンチ操作（gesture系イベント）でもページを拡大縮小するため、
 // ページ全体で止めておく（参考画像ウィンドウなど、必要な所は自前で拡大縮小している）
@@ -2277,11 +2287,13 @@ btnSelClear.addEventListener('click', clearSelection);
 
 // ── 選択範囲の移動 ────────────────────────────────────
 // 移動ツールでドラッグすると、選択範囲（選択が無ければレイヤー全体）の
-// 中身を持ち上げて動かす。動かしている間は floating に
-//   base:   持ち上げた後に残る下地（レイヤーのコピー）
-//   pixels: 持ち上げた中身（w×h、nullは透明）
+// 中身を持ち上げて動かす。「全レイヤー」を選んでいれば、ロックされていない
+// すべてのレイヤーの同じ範囲をまとめて動かす。動かしている間は floating に
+//   entries: 動かすレイヤーごとの {layer, base, pixels}
+//            base:   持ち上げた後に残る下地（レイヤーのコピー）
+//            pixels: 持ち上げた中身（w×h、nullは透明）
 //   pmask:  選択範囲の形（w×h。レイヤー全体を動かす場合はnull）
-// を保持し、レイヤーには常に「下地＋現在位置の中身」を書き込んでおく。
+// を保持し、各レイヤーには常に「下地＋現在位置の中身」を書き込んでおく。
 // そのため保存・サムネイル・Undoはレイヤーをそのまま扱えばよく、
 // 何度動かしても中身の下にあった絵は失われない。
 // 他の操作（描画・選択し直し・レイヤー切替・Undoなど）をした時点で
@@ -2318,19 +2330,31 @@ function extractPixels(src, mask, b) {
   return { pixels, pmask };
 }
 
+let moveAllLayers = false; // 移動ツールの対象が全レイヤーか
+
 function liftSelection() {
   const b = selectionBounds(selectionMask);
   if (!b) return false;
-  const layer = layers[activeLayerIndex];
-  const { pixels, pmask } = extractPixels(layer.cells, selectionMask, b);
-  const base = layer.cells.map(r => [...r]);
-  for (let r = 0; r < b.h; r++) {
-    for (let c = 0; c < b.w; c++) {
-      if (pmask[r][c]) base[b.y + r][b.x + c] = null;
+  const targets = moveAllLayers
+    ? layers.filter(l => !l.locked) // ロック中のレイヤーは動かさない
+    : [layers[activeLayerIndex]];
+  if (!targets.length) return false;
+  let pmask = null;
+  const entries = targets.map(layer => {
+    const extracted = extractPixels(layer.cells, selectionMask, b);
+    pmask = extracted.pmask; // 形はどのレイヤーでも同じ
+    const base = layer.cells.map(r => [...r]);
+    for (let r = 0; r < b.h; r++) {
+      for (let c = 0; c < b.w; c++) {
+        if (pmask[r][c]) base[b.y + r][b.x + c] = null;
+      }
     }
-  }
+    return { layer, base, pixels: extracted.pixels };
+  });
   floating = {
-    layer, base, pixels,
+    entries,
+    all: moveAllLayers,
+    activeLayer: layers[activeLayerIndex],
     pmask: selectionMask ? pmask : null,
     x: b.x, y: b.y, w: b.w, h: b.h,
     mask: selectionMask,
@@ -2340,10 +2364,12 @@ function liftSelection() {
 
 // 現在位置に置いていた中身を取り除き、下地に戻す
 function restoreFloatBase() {
-  const { layer, base, x, y, w, h } = floating;
-  for (let r = Math.max(0, y); r < Math.min(rows, y + h); r++) {
-    for (let c = Math.max(0, x); c < Math.min(cols, x + w); c++) {
-      layer.cells[r][c] = base[r][c];
+  const { entries, x, y, w, h } = floating;
+  for (const { layer, base } of entries) {
+    for (let r = Math.max(0, y); r < Math.min(rows, y + h); r++) {
+      for (let c = Math.max(0, x); c < Math.min(cols, x + w); c++) {
+        layer.cells[r][c] = base[r][c];
+      }
     }
   }
 }
@@ -2351,16 +2377,20 @@ function restoreFloatBase() {
 // 現在位置に中身を書き込み、選択範囲も同じ位置へ動かす。
 // キャンバス外にはみ出した部分はpixelsに残っているので、戻せば元どおり。
 function stampFloat() {
-  const { layer, pixels, pmask, x, y, w, h } = floating;
-  for (let r = 0; r < h; r++) {
-    const tr = y + r;
-    if (tr < 0 || tr >= rows) continue;
-    for (let c = 0; c < w; c++) {
-      const tc = x + c;
-      if (tc < 0 || tc >= cols) continue;
-      const v = pixels[r][c];
-      if (v) layer.cells[tr][tc] = v; // 透明部分は下の絵を隠さない
+  const { entries, pmask, x, y, w, h } = floating;
+  for (const { layer, pixels } of entries) {
+    for (let r = 0; r < h; r++) {
+      const tr = y + r;
+      if (tr < 0 || tr >= rows) continue;
+      for (let c = 0; c < w; c++) {
+        const tc = x + c;
+        if (tc < 0 || tc >= cols) continue;
+        const v = pixels[r][c];
+        if (v) layer.cells[tr][tc] = v; // 透明部分は下の絵を隠さない
+      }
     }
+    // 表示用のキャッシュは描画中のレイヤーしか作り直されないので、他のレイヤーは捨てておく
+    if (layer !== layers[activeLayerIndex]) invalidateLayerCache(layer);
   }
   if (pmask) {
     const m = Array.from({length: rows}, () => Array(cols).fill(false));
@@ -2387,9 +2417,17 @@ function moveFloatTo(x, y) {
   redrawOverlay();
 }
 
+// 動かしている中身のうち、描画中のレイヤーの分（コピーに使う）
+function activeFloatPixels() {
+  const entry = floating && floating.entries.find(en => en.layer === layers[activeLayerIndex]);
+  return entry ? entry.pixels : null;
+}
+
 // 移動を1回ぶん始める（ドラッグ開始・矢印キー）。動かせない場合はfalse。
 function beginMove() {
-  if (activeLayerLocked()) return false;
+  if (!moveAllLayers && activeLayerLocked()) return false;
+  // 対象（このレイヤー／全レイヤー）を切り替えた後は、今の位置で確定して持ち上げ直す
+  if (floating && floating.all !== moveAllLayers) floating = null;
   if (!floating && !liftSelection()) return false;
   pushSnapshot(layersSnapshot(), true); // 1回の移動ごとにUndoできるようにする
   return true;
@@ -2435,10 +2473,11 @@ function updateClipboardButtons() {
 
 function copySelection() {
   if (!started || !selectionMask) return false;
-  if (floating && floating.pmask) {
+  const floatPixels = floating && floating.pmask && activeFloatPixels();
+  if (floatPixels) {
     // 動かしている最中なら、下地と混ざる前の中身そのものをコピーする
-    const { pixels, pmask, x, y, w, h } = floating;
-    clipboard = { pixels, pmask, x, y, w, h };
+    const { pmask, x, y, w, h } = floating;
+    clipboard = { pixels: floatPixels, pmask, x, y, w, h };
   } else {
     const b = selectionBounds(selectionMask);
     if (!b) return false;
@@ -2450,6 +2489,8 @@ function copySelection() {
 
 function deleteSelection() {
   if (!started || !selectionMask || activeLayerLocked()) return false;
+  // 全レイヤーをまとめて動かした後の削除は、描画中のレイヤーだけを対象にする
+  if (floating && floating.entries.length > 1) floating = null;
   if (floating) {
     // 動かしている中身だけを取り除けば、その下の絵が見えるようになる
     pushSnapshot(layersSnapshot(), true);
@@ -2481,7 +2522,12 @@ function pasteClipboard() {
   const x = Math.max(0, Math.min(clipboard.x, cols - w));
   const y = Math.max(0, Math.min(clipboard.y, rows - h));
   const layer = layers[activeLayerIndex];
-  floating = { layer, base: layer.cells.map(r => [...r]), pixels, pmask, x, y, w, h, mask: null };
+  floating = {
+    entries: [{ layer, base: layer.cells.map(r => [...r]), pixels }],
+    all: false, activeLayer: layer,
+    pmask, x, y, w, h, mask: null,
+  };
+  setMoveTarget(false); // 貼り付けたものは描画中のレイヤーだけで動かす
   stampFloat();
   selectionMode = 'none';
   setTool('move');
@@ -2551,7 +2597,20 @@ detectLineCheck.addEventListener('change', () => {
 
 function updateDrawStyleVisibility() {
   drawStyleSection.style.display = currentTool === 'pen' ? '' : 'none';
+  document.getElementById('move-target-section').style.display = currentTool === 'move' ? '' : 'none';
 }
+
+// ── 移動の対象（このレイヤー／全レイヤー） ──
+function setMoveTarget(all) {
+  moveAllLayers = all;
+  document.querySelectorAll('.move-target-btn').forEach(b => {
+    b.classList.toggle('active', (b.dataset.all === '1') === all);
+  });
+  updateHeaderStatus();
+}
+document.querySelectorAll('.move-target-btn').forEach(b => {
+  b.addEventListener('click', () => setMoveTarget(b.dataset.all === '1'));
+});
 
 // ── 描画サイズ ────────────────────────────────────────
 const brushSlider = document.getElementById('brush-slider');
@@ -2596,6 +2655,7 @@ function currentToolLabel() {
   }
   let label = TOOL_LABELS[currentTool] || currentTool;
   const details = [];
+  if (currentTool === 'move' && moveAllLayers) details.push('全レイヤー');
   if (currentTool === 'pen' && DRAW_STYLE_LABELS[drawStyle]) details.push(DRAW_STYLE_LABELS[drawStyle]);
   if ((currentTool === 'pen' || currentTool === 'erase') && brushSize > 1) details.push(`サイズ${brushSize}`);
   if (details.length) label += `（${details.join('・')}）`;
@@ -3053,23 +3113,37 @@ function rulerIndexAt(e, horizontal) {
   return Math.max(1, Math.min(count, Math.floor(pos / cell) + 1));
 }
 
+// 定規をドラッグ中の状態。ピンチのつもりで触れた1本目が強調を変えてしまった場合に、
+// 少しの間なら元に戻せるよう、触れる前の強調を覚えておく。
+let rulerDrag = null; // {axis, before, time, end}
+
+function cancelRulerDrag() {
+  if (!rulerDrag) return;
+  const { axis, before, time, end } = rulerDrag;
+  end();
+  if (performance.now() - time < PINCH_GRACE_MS) setLineHighlight(axis, before);
+}
+
 [[rulerTop, 'col', true], [rulerLeft, 'row', false]].forEach(([cv, axis, horizontal]) => {
   cv.addEventListener('pointerdown', e => {
-    if (e.button !== 0 || !started) return;
+    if (e.button !== 0 || !started || rulerDrag) return;
     e.preventDefault();
     const current = lineHighlight[axis];
     const at = rulerIndexAt(e, horizontal);
     // Shift＋クリックは今の強調の端からその位置までを範囲にする
     const anchor = e.shiftKey && current ? current.start : at;
     const apply = end => setLineHighlight(axis, { start: Math.min(anchor, end), end: Math.max(anchor, end) });
+    const before = current;
     apply(at);
     try { cv.setPointerCapture(e.pointerId); } catch (err) { /* 捕捉できなくてもクリックは効く */ }
-    const onMove = ev => apply(rulerIndexAt(ev, horizontal));
+    const onMove = ev => { if (ev.pointerId === e.pointerId) apply(rulerIndexAt(ev, horizontal)); };
     const onUp = () => {
       cv.removeEventListener('pointermove', onMove);
       cv.removeEventListener('pointerup', onUp);
       cv.removeEventListener('pointercancel', onUp);
+      rulerDrag = null;
     };
+    rulerDrag = { axis, before, time: performance.now(), end: onUp };
     cv.addEventListener('pointermove', onMove);
     cv.addEventListener('pointerup', onUp);
     cv.addEventListener('pointercancel', onUp);
