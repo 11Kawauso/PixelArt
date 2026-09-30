@@ -2,640 +2,196 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ドット絵エディタ</title>
 <link rel="icon" href="images/pixel-art_icon.png" type="image/png">
-<link rel="stylesheet" href="style.css">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --text: #1a1a18;
+    --text-muted: #888884;
+    --border: #e5e5e3;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px 72px;
+  }
+
+  a { color: inherit; }
+
+  /* 真ん中：小さな画面と「ドット絵を描く」（まとめてエディタへのリンク） */
+  .start {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    text-decoration: none;
+  }
+  .screen {
+    display: block;
+    width: 160px;
+    height: 160px;
+    image-rendering: pixelated;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .start:hover .screen,
+  .start:focus-visible .screen {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.12);
+  }
+  .start-label {
+    font-size: 15px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding-bottom: 2px;
+    border-bottom: 1px solid transparent;
+  }
+  .start:hover .start-label { border-bottom-color: currentColor; }
+
+  .legal-links {
+    margin-top: 40px;
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+  }
+  .legal-links a { color: var(--text-muted); text-decoration: none; }
+  .legal-links a:hover { color: var(--text); text-decoration: underline; }
+
+  /* 画面の左下・右下の端 */
+  .corner {
+    position: fixed;
+    bottom: 16px;
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+  }
+  .credit {
+    left: 16px;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .credit:hover { color: var(--text); }
+  .credit svg { width: 12px; height: 12px; fill: currentColor; }
+
+  /* テトリスのブロック。押すと直接テトリスへ */
+  .tetris-link { right: 16px; padding: 4px; }
+  .tetris-link svg { display: block; width: 40px; height: auto; }
+  .tetris-link:hover svg,
+  .tetris-link:focus-visible svg { animation: wiggle 0.5s steps(2, end) infinite; }
+  @keyframes wiggle {
+    0%   { transform: rotate(0deg); }
+    50%  { transform: rotate(-8deg); }
+    100% { transform: rotate(8deg); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .screen { transition: none; }
+    .tetris-link:hover svg, .tetris-link:focus-visible svg { animation: none; }
+  }
+</style>
 </head>
 <body>
 
-<!-- ヘッダー -->
-<header>
-  <h1>ドット絵エディタ</h1>
-  <span class="artwork-chip" id="artwork-chip" style="display:none" title="開いているクラウド作品">📄 <span id="artwork-chip-name"></span></span>
-  <!-- 描画中のレイヤーと、今のツール（筆の状態） -->
-  <span class="status-chip" id="status-chip" style="display:none">
-    <span class="status-layer" id="status-layer"></span>
-    <span class="status-tool" id="status-tool"></span>
-  </span>
-  <div class="header-sep"></div>
-  <div class="bg-switcher">
-    <button class="bg-btn active" data-bg="#ffffff" title="白" style="background:#ffffff;"></button>
-    <button class="bg-btn" data-bg="#808080" title="灰色" style="background:#808080;"></button>
-    <button class="bg-btn" data-bg="#000000" title="黒" style="background:#000000;"></button>
-  </div>
-  <button id="btn-toggle-canvas" title="キャンバス表示切替">🔲</button>
-  <button id="btn-undo" disabled title="元に戻す（Ctrl+Z）">↩ <span class="hide-mobile">元に戻す</span><kbd class="key-hint" data-shortcut="undo">Ctrl+Z</kbd></button>
-  <button id="btn-redo" disabled title="やり直し（Ctrl+Y）">↪ <span class="hide-mobile">やり直し</span><kbd class="key-hint" data-shortcut="redo">Ctrl+Y</kbd></button>
-  <button id="btn-clear" class="danger">クリア</button>
+<a class="start" href="editor.html">
+  <canvas class="screen" id="screen" width="16" height="16" aria-hidden="true"></canvas>
+  <span class="start-label">ドット絵を描く</span>
+</a>
 
-  <!-- ファイルメニュー -->
-  <div class="file-menu" id="file-menu">
-    <button id="btn-file-menu">📁 <span class="hide-mobile">ファイル</span> ▾</button>
-    <div class="file-dropdown" id="file-dropdown" style="display:none">
+<nav class="legal-links">
+  <a href="terms.html">利用規約</a>
+  <a href="privacy.html">プライバシーポリシー</a>
+</nav>
 
-      <button id="btn-new-canvas" class="menu-item">🆕 新規キャンバス</button>
+<a class="corner credit" href="https://x.com/11Kawauso" target="_blank" rel="noopener">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+  @11Kawauso
+</a>
 
-      <div id="save-menu-group">
-        <button id="btn-menu-save" class="menu-item">💾 保存 ▸</button>
-        <div class="menu-submenu" id="save-subdropdown" style="display:none">
-          <button id="btn-download" class="menu-item">↓ PNG保存</button>
-          <button id="btn-download-transparent" class="menu-item">↓ 透過保存</button>
-          <div id="cloud-save-menu" style="display:none">
-            <button id="btn-cloud-save" class="menu-item">☁ クラウド保存 ▸</button>
-            <div class="menu-submenu" id="cloud-save-dropdown" style="display:none">
-              <button id="btn-cloud-save-new" class="menu-item">🆕 新規保存</button>
-              <button id="btn-cloud-save-over" class="menu-item">♻️ 上書き保存</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <button id="btn-gallery" class="menu-item" style="display:none">🖼 ギャラリー</button>
-      <button id="btn-logout" class="menu-item" style="display:none">⏻ ログアウト</button>
-      <button id="btn-login" class="menu-item">G ログイン</button>
-
-      <div class="menu-divider"></div>
-      <a class="menu-item" href="terms.html" target="_blank" rel="noopener">📄 利用規約</a>
-      <a class="menu-item" href="privacy.html" target="_blank" rel="noopener">🔒 プライバシーポリシー</a>
-    </div>
-  </div>
-
-  <div class="user-chip" id="user-chip" style="display:none">
-    <img id="user-avatar" alt="" referrerpolicy="no-referrer">
-  </div>
-</header>
-
-<!-- メイン -->
-<div class="app">
-
-  <!-- 左パネル -->
-  <div class="panel" id="panel">
-
-    <!-- パネルタブ -->
-    <div class="panel-tabs">
-      <button class="panel-tab-btn active" id="tab-draw">✏️ 描画</button>
-      <button class="panel-tab-btn" id="tab-layers">🗂 レイヤー</button>
-      <button class="panel-tab-arrow" id="btn-dock-layers" title="レイヤーパネルを右に並べて表示">▶</button>
-    </div>
-
-    <!-- 描画タブ -->
-    <div class="panel-tab-page" id="panel-tab-draw">
-
-    <!-- ツール -->
-    <div class="panel-section">
-      <div class="panel-label">ツール</div>
-      <div class="tool-grid">
-        <button class="tool-btn active" data-tool="pen" title="ペン（Q）">✏️ ペン<kbd class="key-hint">Q</kbd></button>
-        <button class="tool-btn" data-tool="fill" title="塗り潰し（W）">🪣 塗り潰し<kbd class="key-hint">W</kbd></button>
-        <button class="tool-btn" data-tool="erase" title="消しゴム（A）">🧹 消しゴム<kbd class="key-hint">A</kbd></button>
-        <button class="tool-btn" data-tool="pick" title="スポイト（S）">💉 スポイト<kbd class="key-hint">S</kbd></button>
-        <button class="tool-btn" data-tool="move" title="移動（V）：選択範囲の中身（選択が無ければレイヤー全体）をドラッグや矢印キーで動かします" style="grid-column: span 2;">✥ 移動<kbd class="key-hint">V</kbd></button>
-      </div>
-    </div>
-
-    <!-- 選択 -->
-    <div class="panel-section" id="selection-section">
-      <div class="panel-label">選択</div>
-      <div class="tool-grid" style="grid-template-columns:1fr 1fr 1fr;">
-        <button class="sel-btn" id="btn-sel-range">📐 範囲</button>
-        <button class="sel-btn" id="btn-sel-color">🎨 色</button>
-        <button class="sel-btn" id="btn-sel-flood">💧 隣接色</button>
-      </div>
-      <div class="tool-grid" id="range-mode-row" style="grid-template-columns:1fr 1fr; margin-top:6px; display:none;">
-        <button class="sel-btn active" id="btn-range-rect">四角で囲う</button>
-        <button class="sel-btn" id="btn-range-free">自分で指定</button>
-      </div>
-      <label class="detect-line-label" id="range-autoclose-label" style="display:none;" title="オフの場合、始点まで戻らないとなぞった軌跡のみが選択されます">
-        <input type="checkbox" id="range-autoclose" checked style="accent-color:var(--accent)">
-        始点まで自動でつなぐ
-      </label>
-      <div class="tool-grid" style="grid-template-columns:1fr 1fr 1fr; margin-top:6px;">
-        <button class="sel-btn" id="btn-cut" disabled title="切り取り（Ctrl+X）">切り取り</button>
-        <button class="sel-btn" id="btn-copy" disabled title="コピー（Ctrl+C）">コピー</button>
-        <button class="sel-btn" id="btn-paste" disabled title="貼り付け（Ctrl+V）">貼り付け</button>
-      </div>
-      <button id="btn-sel-clear" class="danger" style="width:100%; margin-top:6px; display:none;">選択解除</button>
-    </div>
-
-    <!-- 描画スタイル -->
-    <div class="panel-section" id="draw-style-section">
-      <div class="panel-label">描画スタイル</div>
-      <div class="tool-grid">
-        <button class="style-btn active" data-style="normal">通常</button>
-        <button class="style-btn" data-style="col">縦</button>
-        <button class="style-btn" data-style="row">横</button>
-      </div>
-      <label class="detect-line-label" id="detect-line-label" style="display:none;">
-        <input type="checkbox" id="detect-line" style="accent-color:var(--accent)">
-        線を検知
-      </label>
-    </div>
-
-    <!-- 移動の対象（移動ツールのときだけ表示） -->
-    <div class="panel-section" id="move-target-section" style="display:none">
-      <div class="panel-label">移動の対象</div>
-      <div class="tool-grid">
-        <button class="move-target-btn active" data-all="0" title="描画中のレイヤーだけを動かします">このレイヤー</button>
-        <button class="move-target-btn" data-all="1" title="ロックされていない全レイヤーをまとめて動かします">全レイヤー</button>
-      </div>
-      <div class="layer-hint">選択範囲があれば、その範囲だけを動かします</div>
-    </div>
-
-    <!-- 描画サイズ -->
-    <div class="panel-section">
-      <div class="panel-label">描画サイズ</div>
-      <div class="brush-size-row">
-        <input type="range" id="brush-slider" min="1" max="10" value="1" step="1">
-        <span class="brush-size-val" id="brush-val">1</span>
-      </div>
-    </div>
-
-    <!-- グリッドサイズ -->
-    <div class="panel-section">
-      <div class="panel-label">グリッドサイズ</div>
-      <div class="size-presets">
-        <button class="preset-btn" data-size="8">8</button>
-        <button class="preset-btn" data-size="16">16</button>
-        <button class="preset-btn active" data-size="32">32</button>
-        <button class="preset-btn" data-size="64">64</button>
-        <button class="preset-btn" data-size="128">128</button>
-        <button class="preset-btn" data-size="256">256</button>
-        <button class="preset-btn" data-size="512">512</button>
-        <button class="preset-btn" data-size="1024">1024</button>
-      </div>
-      <div class="size-row">
-        <label>全体</label>
-        <input type="range" id="both-slider" min="4" max="1024" value="32" step="1">
-        <input type="number" class="size-input" id="both-val" min="4" max="1024" value="32">
-      </div>
-      <div class="size-row">
-        <label>列</label>
-        <input type="range" id="cols-slider" min="4" max="1024" value="32" step="1">
-        <input type="number" class="size-input" id="cols-val" min="4" max="1024" value="32">
-      </div>
-      <div class="size-row">
-        <label>行</label>
-        <input type="range" id="rows-slider" min="4" max="1024" value="32" step="1">
-        <input type="number" class="size-input" id="rows-val" min="4" max="1024" value="32">
-      </div>
-      <button id="btn-resize" style="width:100%; margin-top:4px;">適用</button>
-    </div>
-
-    <!-- カラー -->
-    <div class="panel-section">
-      <div class="panel-label">カラー</div>
-      <div class="palette-grid" id="palette"></div>
-    </div>
-
-    <!-- カスタムカラーパレット -->
-    <div class="panel-section">
-      <div class="panel-label">カスタムカラー</div>
-      <div class="palette-grid" id="custom-palette"></div>
-      <div class="custom-palette-actions">
-        <button id="btn-delete-mode">削除</button>
-        <button id="btn-delete-all" class="danger">全削除</button>
-      </div>
-      <div class="custom-palette-actions">
-        <button id="btn-palette-export" title="カスタムカラーをファイルに書き出す（.hex / .gpl）">書き出し</button>
-        <button id="btn-palette-import" title="パレットファイルを読み込む（.hex / .gpl / .pal / .txt / .png）">読み込み</button>
-      </div>
-      <input type="file" id="palette-file-input" accept=".hex,.gpl,.pal,.txt,.png,.gif,.bmp" style="display:none">
-      <div class="layer-hint" id="custom-palette-hint" style="display:none"></div>
-    </div>
-
-    <!-- パレット書き出し形式の選択モーダル -->
-    <div class="confirm-modal" id="palette-export-modal" style="display:none">
-      <div class="confirm-card">
-        <p>書き出す形式を選んでください</p>
-        <div class="palette-export-options">
-          <button id="btn-export-hex" class="primary">.hex<span>Lospec など</span></button>
-          <button id="btn-export-gpl" class="primary">.gpl<span>GIMP・Aseprite など</span></button>
-        </div>
-        <div class="confirm-actions">
-          <button id="btn-export-cancel">キャンセル</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 色選択モーダル -->
-    <div class="confirm-modal modal-left" id="color-pick-modal" style="display:none">
-      <div class="confirm-card">
-        <p>色を選択してください</p>
-        <div class="confirm-actions" style="margin-bottom:14px;">
-          <button id="btn-color-ok" class="primary">OK</button>
-          <button id="btn-color-cancel">キャンセル</button>
-        </div>
-        <input type="color" id="custom-color-picker" value="#ff0000" class="color-pick-input">
-      </div>
-    </div>
-
-    <!-- 全削除確認モーダル -->
-    <div class="confirm-modal" id="confirm-delete-all" style="display:none">
-      <div class="confirm-card">
-        <p>カスタムカラーをすべて削除しますか？</p>
-        <div class="confirm-actions">
-          <button id="btn-confirm-ok" class="primary">OK</button>
-          <button id="btn-confirm-no">いいえ</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 画像から変換 -->
-    <div class="panel-section">
-      <div class="panel-label">画像から変換</div>
-      <div id="drop-zone">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-          <path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2M12 4v12m-4-4l4-4 4 4"/>
-        </svg>
-        クリックまたは<br>ドロップで画像を選択
-        <input type="file" id="file-input" accept="image/*" style="display:none">
-      </div>
-      <div style="margin-top:8px;">
-        <div class="panel-label" style="margin-bottom:4px;">変換方式</div>
-        <div class="method-row">
-          <button class="method-btn active" data-method="mode">最頻色</button>
-          <button class="method-btn" data-method="avg">平均色</button>
-        </div>
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-bottom:6px;">
-          <input type="checkbox" id="convert-use-palette" style="accent-color:var(--accent)">
-          指定した色だけで変換する
-        </label>
-
-        <!-- 色数（パレット未使用時） -->
-        <div id="convert-count-group">
-          <div class="panel-label" style="margin-bottom:4px;">色数</div>
-          <div class="color-count-grid">
-            <button class="cc-btn" data-colors="8"><span class="cc-num">8色</span><span class="cc-label">超レトロ</span></button>
-            <button class="cc-btn" data-colors="16"><span class="cc-num">16色</span><span class="cc-label">レトロ</span></button>
-            <button class="cc-btn active" data-colors="32"><span class="cc-num">32色</span><span class="cc-label">標準</span></button>
-            <button class="cc-btn" data-colors="64"><span class="cc-num">64色</span><span class="cc-label">高品質</span></button>
-            <button class="cc-btn" data-colors="128"><span class="cc-num">128色</span><span class="cc-label">超高品質</span></button>
-          </div>
-        </div>
-
-        <!-- 変換用パレット（パレット使用時） -->
-        <div id="convert-palette-group" style="display:none;">
-          <div class="panel-label" style="margin-bottom:4px;">変換に使う色</div>
-          <div class="palette-grid" id="convert-palette"></div>
-          <div class="custom-palette-actions">
-            <button id="btn-cp-delete-mode">削除</button>
-            <button id="btn-cp-delete-all" class="danger">全削除</button>
-          </div>
-          <div class="layer-hint" id="convert-palette-hint">＋から色を追加してください</div>
-        </div>
-
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:8px;">
-          <input type="checkbox" id="convert-resize-canvas" checked style="accent-color:var(--accent)">
-          画像サイズに合わせてキャンバスサイズを変更
-        </label>
-        <button id="btn-convert" style="width:100%; margin-top:8px;" disabled>変換する</button>
-      </div>
-    </div>
-
-    <!-- トレース -->
-    <div class="panel-section">
-      <div class="panel-label">トレース</div>
-      <div id="trace-drop-zone">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-          <path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2M12 4v12m-4-4l4-4 4 4"/>
-        </svg>
-        クリックまたは<br>ドロップで参考画像を選択
-        <input type="file" id="trace-file-input" accept="image/*" style="display:none">
-      </div>
-      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:8px;">
-        <input type="checkbox" id="trace-resize-canvas" style="accent-color:var(--accent)">
-        画像サイズに合わせてキャンバスサイズを変更
-      </label>
-      <div class="brush-size-row" style="margin-top:8px;">
-        <span style="font-size:11px; color:var(--text-muted); white-space:nowrap;">不透明度</span>
-        <input type="range" id="trace-opacity" min="0" max="100" value="50" step="1">
-        <span class="brush-size-val" id="trace-opacity-val">50</span>
-      </div>
-      <div class="panel-label" style="margin:8px 0 4px;">重ね順</div>
-      <div class="tool-grid">
-        <button class="trace-pos-btn active" data-trace-pos="below">⬇ レイヤーの下</button>
-        <button class="trace-pos-btn" data-trace-pos="above">⬆ レイヤーの上</button>
-      </div>
-      <button id="btn-trace-remove" class="danger" style="width:100%; margin-top:8px; display:none;">トレース画像を削除</button>
-      <div class="layer-hint">キャンバスの下描き用の参考表示です。保存には含まれません</div>
-    </div>
-
-    <!-- グリッド表示 -->
-    <div class="panel-section">
-      <div class="panel-label">表示</div>
-      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-        <input type="checkbox" id="show-grid" checked style="accent-color:var(--accent)">
-        グリッド線を表示
-      </label>
-      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:6px;">
-        <input type="checkbox" id="show-rulers" checked style="accent-color:var(--accent)">
-        定規を表示
-      </label>
-      <div class="layer-hint">D キー（または右下の 👁）を押している間は、描いた絵だけを表示します</div>
-    </div>
-
-    <!-- 定規で強調 -->
-    <div class="panel-section">
-      <div class="panel-label">列・行を強調</div>
-      <div class="line-input-row">
-        <label for="col-range-input">列</label>
-        <input type="text" id="col-range-input" class="line-range-input" inputmode="numeric" placeholder="例：60 / 60-80" autocomplete="off">
-      </div>
-      <div class="line-input-row">
-        <label for="row-range-input">行</label>
-        <input type="text" id="row-range-input" class="line-range-input" inputmode="numeric" placeholder="例：5 / 5-12" autocomplete="off">
-      </div>
-      <button id="btn-line-clear" style="width:100%; margin-top:6px;">強調を解除</button>
-      <div class="layer-hint">左上が (1,1) です。定規をクリック・ドラッグしても選べます</div>
-    </div>
-
-    </div>
-
-    <!-- レイヤータブ -->
-    <div class="panel-tab-page" id="panel-tab-layers" style="display:none;">
-
-    <!-- レイヤー -->
-    <div class="panel-section">
-      <div class="panel-label">レイヤー</div>
-      <div class="layer-opacity-row">
-        <label for="layer-opacity">不透明度</label>
-        <input type="range" id="layer-opacity" min="0" max="100" value="100" step="1">
-        <span class="layer-opacity-val" id="layer-opacity-val">100</span>
-      </div>
-      <div class="layer-list" id="layer-list"></div>
-      <div class="layer-actions">
-        <button id="btn-layer-add" title="レイヤーを追加">＋ 追加</button>
-        <button id="btn-layer-up" title="レイヤーを上へ移動">↑</button>
-        <button id="btn-layer-down" title="レイヤーを下へ移動">↓</button>
-        <button id="btn-layer-delete" class="danger" title="レイヤーを削除">🗑</button>
-      </div>
-      <div class="layer-actions" style="margin-top:5px;">
-        <button id="btn-layer-dup" title="レイヤーを複製">⧉ 複製</button>
-        <button id="btn-layer-merge" title="下のレイヤーと結合">⬇ 下と結合</button>
-        <button id="btn-layer-lock" title="レイヤーをロック">🔒</button>
-      </div>
-      <div class="layer-actions" style="margin-top:5px;">
-        <button id="btn-layer-flip-h" title="レイヤーを左右反転">⬌ 左右反転</button>
-        <button id="btn-layer-flip-v" title="レイヤーを上下反転">⬍ 上下反転</button>
-      </div>
-      <div class="layer-hint">名前はダブルクリックで変更できます</div>
-    </div>
-
-    </div>
-
-  </div>
-
-  <!-- リサイズハンドル -->
-  <div class="panel-resize" id="panel-resize"></div>
-
-  <!-- レイヤーパネルのドック（右に並べて表示するときの入れ物） -->
-  <div class="layer-dock" id="layer-dock" style="display:none">
-    <div class="layer-dock-header">
-      <span>🗂 レイヤー</span>
-      <button id="btn-undock-layers" title="タブ表示に戻す">◀</button>
-    </div>
-    <!-- ここに #panel-tab-layers を移動して表示する -->
-  </div>
-
-  <!-- モバイル用背景オーバーレイ -->
-  <div class="panel-backdrop" id="panel-backdrop"></div>
-
-  <!-- パネル開閉ボタン -->
-  <button class="panel-toggle" id="panel-toggle" title="パネルの表示切替">◀</button>
-
-  <!-- キャンバスエリア（上と左に定規） -->
-  <div class="canvas-stage" id="canvas-stage">
-    <button class="ruler-corner" id="ruler-corner" title="定規の強調表示を解除"></button>
-    <canvas class="ruler ruler-top" id="ruler-top" title="クリックでその列を強調（ドラッグで範囲）"></canvas>
-    <canvas class="ruler ruler-left" id="ruler-left" title="クリックでその行を強調（ドラッグで範囲）"></canvas>
-    <div class="canvas-area" id="canvas-area">
-      <div class="canvas-scroll-pad">
-        <div id="canvas-wrap">
-          <canvas id="canvas-bg"></canvas>
-          <canvas id="canvas-trace"></canvas>
-          <canvas id="canvas-main"></canvas>
-          <div id="canvas-grid"></div>
-          <div class="line-highlight" id="col-highlight" style="display:none"></div>
-          <div class="line-highlight" id="row-highlight" style="display:none"></div>
-          <canvas id="canvas-overlay"></canvas>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- スタートモーダル -->
-<div id="start-overlay">
-  <div class="start-card">
-    <div style="font-size:15px; font-weight:500;">はじめましょう</div>
-    <p>白紙から描くか、<br>画像をドット絵に変換できます</p>
-    <div class="start-actions">
-      <button id="btn-restore" class="primary" style="display:none">⏪ 前回の続きから<span class="restore-time" id="restore-time"></span></button>
-      <button id="btn-new" class="primary">白紙で始める</button>
-      <button id="btn-load-img">画像を読み込む</button>
-      <button id="btn-start-gallery">🖼 ギャラリーから開く</button>
-    </div>
-  </div>
-</div>
-
-<!-- 参考画像（画面右上固定・図形ボタンの左） -->
-<button class="ref-toggle" id="btn-ref-toggle" title="参考画像を表示">
-  <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-    <rect x="2.5" y="4" width="19" height="16" rx="2" fill="#fff" stroke="#5596ff" stroke-width="2"/>
-    <circle cx="8.5" cy="9.5" r="2" fill="#ffc21a"/>
-    <path d="M4 18.5l5-5.5 3 3 4-5 4.5 7.5z" fill="#3cb96b"/>
+<a class="corner tetris-link" href="editor.html?tetris" title="テトリスで遊ぶ" aria-label="テトリスで遊ぶ">
+  <svg viewBox="0 0 32 21" aria-hidden="true" shape-rendering="crispEdges">
+    <g fill="#8e44ad">
+      <rect x="0" y="0" width="10" height="10"/><rect x="11" y="0" width="10" height="10"/>
+      <rect x="22" y="0" width="10" height="10"/><rect x="11" y="11" width="10" height="10"/>
+    </g>
   </svg>
-</button>
-<input type="file" id="ref-file-input" accept="image/*" style="display:none">
+</a>
 
-<!-- 参考画像ウィンドウ（ドラッグで移動・右下の角で拡大縮小） -->
-<div class="ref-window" id="ref-window" style="display:none">
-  <div class="ref-header">
-    <span class="ref-title">参考画像</span>
-    <button class="ref-header-btn ref-zoom-btn" id="btn-ref-fit" title="全体表示に戻す（画像をダブルクリックでも戻せます）" style="display:none"></button>
-    <button class="ref-header-btn" id="btn-ref-change" title="画像を変更">📁</button>
-    <button class="ref-header-btn" id="btn-ref-close" title="閉じる">✕</button>
-  </div>
-  <div class="ref-body" id="ref-body">
-    <img id="ref-img" alt="参考画像" draggable="false" style="display:none">
-    <div class="ref-empty" id="ref-empty">クリックまたはドロップで<br>画像を選択</div>
-  </div>
-  <div class="ref-resize" id="ref-resize" title="ドラッグで大きさを変更"></div>
-</div>
+<script>
+// 小さな画面に、ドット絵が1マスずつ描かれていく様子を繰り返し表示する
+(() => {
+  const ART = [
+    '..XXX...XXX..',
+    '.XRRRX.XRRRX.',
+    'XRWWRRXRRRRRX',
+    'XRWRRRRRRRRRX',
+    'XRRRRRRRRRRRX',
+    '.XRRRRRRRRDX.',
+    '..XRRRRRRDX..',
+    '...XRRRRDX...',
+    '....XRRDX....',
+    '.....XDX.....',
+    '......X......',
+  ];
+  const COLORS = { X: '#3a2a2a', R: '#e74c3c', D: '#c0392b', W: '#ffffff' };
+  const SIZE = 16;
+  const OX = 1, OY = 2; // 16×16の画面の中央に置く
 
-<!-- テンプレート図形メニュー（画面右上固定） -->
-<div class="shape-menu" id="shape-menu">
-  <button class="shape-menu-btn" id="btn-shape-menu" title="テンプレート図形"><img src="images/shape-icon.png" alt="テンプレート図形"></button>
-  <div class="shape-menu-dropdown" id="shape-menu-dropdown" style="display:none;">
-    <button class="shape-opt" data-shape="line" data-fill="1">📏 直線</button>
-    <button class="shape-opt" data-shape="circle" data-fill="1">⚫ 円</button>
-    <button class="shape-opt" data-shape="circle" data-fill="0">⚪ 円（枠のみ）</button>
-    <button class="shape-opt" data-shape="rect" data-fill="1">⬛ 四角</button>
-    <button class="shape-opt" data-shape="rect" data-fill="0">⬜ 四角（枠のみ）</button>
-    <button class="shape-opt" data-shape="diamond" data-fill="1">🔶 ひし形</button>
-    <button class="shape-opt" data-shape="diamond" data-fill="0">🔷 ひし形（枠のみ）</button>
-    <button class="shape-opt" data-shape="heart" data-fill="1">❤️ ハート</button>
-    <button class="shape-opt" data-shape="heart" data-fill="0">🤍 ハート（枠のみ）</button>
-  </div>
-</div>
+  const ctx = document.getElementById('screen').getContext('2d');
+  const pixels = [];
+  ART.forEach((line, y) => [...line].forEach((ch, x) => {
+    if (COLORS[ch]) pixels.push({ x: x + OX, y: y + OY, color: COLORS[ch] });
+  }));
 
-<!-- 色履歴（描画エリア左下固定） -->
-<div class="color-history" id="color-history">
-  <div class="color-dot dot-xs" id="dot-4" title="4つ前の色"></div>
-  <div class="color-dot dot-small" id="dot-3" title="3つ前の色"></div>
-  <div class="color-dot dot-medium" id="dot-2" title="2つ前の色"></div>
-  <div class="color-dot dot-large" id="dot-1" title="1つ前の色"></div>
-  <div class="color-dot dot-xl" id="dot-0" title="現在の色"></div>
-</div>
+  // エディタと同じ市松模様の背景
+  function clearScreen() {
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        ctx.fillStyle = (x + y) % 2 ? '#eeeeee' : '#dddddd';
+        ctx.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+  function put(p) {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, 1, 1);
+  }
 
-<!-- ズーム（画面右下固定） -->
-<div class="zoom-controls">
-  <button id="btn-tetris" class="tetris-start-btn" title="今のキャンバスサイズでテトリス">
-    <svg width="15" height="10" viewBox="0 0 32 21" aria-hidden="true" shape-rendering="crispEdges">
-      <g fill="#8e44ad">
-        <rect x="0" y="0" width="10" height="10"/><rect x="11" y="0" width="10" height="10"/>
-        <rect x="22" y="0" width="10" height="10"/><rect x="11" y="11" width="10" height="10"/>
-      </g>
-    </svg>
-  </button>
-  <button id="btn-art-preview" title="押している間、描いた絵だけを表示（Dキー）">👁</button>
-  <button id="btn-zoom-out">−</button>
-  <span id="zoom-label">100%</span>
-  <button id="btn-zoom-in">＋</button>
-</div>
+  clearScreen();
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    pixels.forEach(put);
+    return;
+  }
 
-<!-- ステータスバー -->
-<div class="statusbar">
-  <span>位置: <b id="stat-pos">—</b></span>
-  <span>色: <b id="stat-color">—</b></span>
-  <span>グリッド: <b id="stat-grid">32×32</b></span>
-</div>
-
-<!-- 新規キャンバス確認モーダル -->
-<!-- PNG保存の倍率選択モーダル -->
-<div class="confirm-modal" id="png-export-modal" style="display:none">
-  <div class="confirm-card png-export-card">
-    <p id="png-export-title">PNG保存</p>
-    <div class="png-scale-grid" id="png-scale-grid"></div>
-    <div class="layer-hint png-export-hint">ゲーム素材には ×1（1ドット＝1ピクセル）がおすすめです</div>
-    <div class="confirm-actions">
-      <button id="btn-png-export-ok" class="primary">保存</button>
-      <button id="btn-png-export-cancel">キャンセル</button>
-    </div>
-  </div>
-</div>
-
-<div class="confirm-modal" id="new-canvas-confirm-modal" style="display:none">
-  <div class="confirm-card">
-    <p>新規キャンバスを作成しますか？<br>現在の内容は失われます</p>
-    <div class="confirm-actions">
-      <button id="btn-new-canvas-ok" class="danger">作成する</button>
-      <button id="btn-new-canvas-cancel">キャンセル</button>
-    </div>
-  </div>
-</div>
-
-<!-- ログアウト確認モーダル -->
-<div class="confirm-modal" id="logout-confirm-modal" style="display:none">
-  <div class="confirm-card">
-    <p>ログアウトしますか？</p>
-    <div class="confirm-actions">
-      <button id="btn-logout-ok" class="danger">ログアウト</button>
-      <button id="btn-logout-cancel">キャンセル</button>
-    </div>
-  </div>
-</div>
-
-<!-- ギャラリーモーダル -->
-<div class="confirm-modal" id="gallery-modal" style="display:none">
-  <div class="confirm-card gallery-card">
-    <p id="gallery-title">マイギャラリー</p>
-    <div class="gallery-list" id="gallery-list"></div>
-    <div class="confirm-actions">
-      <button id="btn-gallery-close">閉じる</button>
-    </div>
-  </div>
-</div>
-
-<!-- 作品名入力モーダル -->
-<div class="confirm-modal" id="save-name-modal" style="display:none">
-  <div class="confirm-card">
-    <p>作品名を付けて保存</p>
-    <input type="text" id="save-name-input" class="save-name-input" maxlength="30" placeholder="作品名">
-    <div class="confirm-actions">
-      <button id="btn-save-ok" class="primary">保存</button>
-      <button id="btn-save-cancel">キャンセル</button>
-    </div>
-  </div>
-</div>
-
-<!-- 通知トースト -->
-<div class="cloud-toast" id="cloud-toast" style="display:none"></div>
-
-<!-- テトリス画面のサイドパネル（遊んでいる間だけ左から出てくる） -->
-<aside class="tetris-side" id="tetris-side">
-  <section class="tetris-side-top">
-    <div class="tetris-title">TETRIS <span id="tetris-size"></span></div>
-    <div class="tetris-box" id="tetris-colors-box">
-      <div class="tetris-label">COLORS</div>
-      <div class="tetris-colors" id="tetris-colors"></div>
-    </div>
-    <div class="tetris-previews">
-      <div class="tetris-box"><div class="tetris-label">NEXT</div><canvas id="tetris-next"></canvas></div>
-      <div class="tetris-box"><div class="tetris-label">HOLD</div><canvas id="tetris-hold"></canvas></div>
-    </div>
-  </section>
-
-  <section class="tetris-side-mid">
-    <div class="tetris-stat"><span class="tetris-label">SCORE</span><b id="tetris-score">0</b></div>
-    <div class="tetris-stat"><span class="tetris-label">LINES</span><b id="tetris-lines">0</b></div>
-    <div class="tetris-stat"><span class="tetris-label">LEVEL</span><b id="tetris-level">1</b></div>
-    <div class="tetris-msg" id="tetris-msg"></div>
-    <div class="tetris-note" id="tetris-note"></div>
-  </section>
-
-  <section class="tetris-side-bottom">
-    <div class="tetris-label">CONTROLS</div>
-    <dl class="tetris-keys">
-      <dt>← →</dt><dd>移動</dd>
-      <dt>↓</dt><dd>ゆっくり落とす</dd>
-      <dt>Space</dt><dd>一気に落とす</dd>
-      <dt>↑ / X</dt><dd>右回転</dd>
-      <dt>Z</dt><dd>左回転</dd>
-      <dt>C</dt><dd>ホールド</dd>
-      <dt>Esc</dt><dd>ポーズ</dd>
-      <dt>ドラッグ</dt><dd>キャンバス移動</dd>
-      <dt>ホイール</dt><dd>拡大縮小</dd>
-    </dl>
-    <div class="tetris-pad" id="tetris-pad">
-      <button data-act="ccw">⟲</button>
-      <button data-act="cw">⟳</button>
-      <button data-act="hold">HOLD</button>
-      <button data-act="left">◀</button>
-      <button data-act="down">▼</button>
-      <button data-act="right">▶</button>
-      <button data-act="drop" class="tetris-pad-wide">⤓ 一気に落とす</button>
-    </div>
-    <div class="tetris-touch-hint">1本指で移動・2本指で拡大縮小</div>
-    <button id="btn-tetris-pause" class="tetris-pause-btn">⏸ ポーズ</button>
-  </section>
-
-  <!-- ポーズ・ゲームオーバー時にサイドパネルの上に重ねる -->
-  <div class="tetris-panel" id="tetris-panel" style="display:none">
-    <div class="tetris-panel-card">
-      <p id="tetris-panel-title"></p>
-      <button id="btn-tetris-resume" class="primary">▶ 再開</button>
-      <button id="btn-tetris-retry" class="primary">🔁 もう一度</button>
-      <button id="btn-tetris-retry-art">🧱 今の絵を足場にしてもう一度</button>
-      <button id="btn-tetris-keep">🖼 盤面をレイヤーに残して終了</button>
-      <button id="btn-tetris-quit">✕ 終了</button>
-    </div>
-  </div>
-</aside>
-
-<script src="script.js"></script>
-<script src="tetris.js"></script>
-<script type="module" src="cloud.js"></script>
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  (async function loop() {
+    for (;;) {
+      clearScreen();
+      await sleep(500);
+      const order = [...pixels];
+      for (let i = order.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      for (const p of order) { put(p); await sleep(18); }
+      await sleep(2600);
+    }
+  })();
+})();
+</script>
 </body>
 </html>

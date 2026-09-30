@@ -51,11 +51,50 @@
     for (let i = 1; i < 4; i++) rots.push(rots[i - 1].map(([x, y]) => [n - 1 - y, x]));
     SHAPES[t] = rots;
   });
-  // 回転して壁や他のブロックにぶつかったとき、ずらして収まる位置を順に試す
-  const KICKS = [[0, 0], [-1, 0], [1, 0], [0, -1], [-2, 0], [2, 0], [-1, -1], [1, -1]];
+  // 回転して壁や他のブロックにぶつかったとき、ずらして収まる位置を順に試す。
+  // 通常の7種類は本家と同じSRS（スーパーローテーションシステム）の表を使う。
+  // 表は本家の資料どおり上向きが+yで書き、下向きが+yの盤面に合わせて符号を反転する。
+  // キーは「回転前の向き」「回転後の向き」（0=出現時, 1=右, 2=逆さ, 3=左）
+  const flipY = table => Object.fromEntries(
+    Object.entries(table).map(([k, list]) => [k, list.map(([x, y]) => [x, -y])])
+  );
+  const SRS_JLSTZ = flipY({
+    '01': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    '10': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+    '12': [[0, 0], [1, 0], [1, -1], [0, 2], [1, 2]],
+    '21': [[0, 0], [-1, 0], [-1, 1], [0, -2], [-1, -2]],
+    '23': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+    '32': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '30': [[0, 0], [-1, 0], [-1, -1], [0, 2], [-1, 2]],
+    '03': [[0, 0], [1, 0], [1, 1], [0, -2], [1, -2]],
+  });
+  const SRS_I = flipY({
+    '01': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+    '10': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+    '12': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+    '21': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+    '23': [[0, 0], [2, 0], [-1, 0], [2, 1], [-1, -2]],
+    '32': [[0, 0], [-2, 0], [1, 0], [-2, -1], [1, 2]],
+    '30': [[0, 0], [1, 0], [-2, 0], [1, -2], [-2, 1]],
+    '03': [[0, 0], [-1, 0], [2, 0], [-1, 2], [2, -1]],
+  });
+  // 特殊ブロック用（SRSの表が無いので、左右・上に少しずらして試す）
+  const EXTRA_KICKS = [[0, 0], [-1, 0], [1, 0], [0, -1], [-2, 0], [2, 0], [-1, -1], [1, -1]];
+  function kicksFor(type, from, to) {
+    if (type === 'I') return SRS_I[`${from}${to}`];
+    if (type in PIECES) return SRS_JLSTZ[`${from}${to}`]; // Oは回しても形が変わらないので(0,0)で収まる
+    return EXTRA_KICKS;
+  }
+
+  // 本家のブロックの色（ホーム画面から直接遊ぶとき）
+  const STANDARD_COLORS = {
+    I: '#31c7ef', O: '#f7d308', T: '#ad4d9c', S: '#42b642', Z: '#ef2029', J: '#5a65ad', L: '#ef7921',
+  };
+  const STANDARD_COLS = 10, STANDARD_ROWS = 20;
 
   const DAS = 170;             // 左右キーを押しっぱなしにしてから連続移動が始まるまで
-  const ARR = 35;              // 連続移動の間隔
+  const ARR = 33;              // 連続移動の間隔
+  const NEXT_COUNT = 3;        // 先に見せるブロックの数
   const SOFT_DROP_INTERVAL = 16;
   const LOCK_DELAY = 500;      // 着地してから固定されるまでの猶予
   const MAX_LOCK_RESETS = 15;  // 着地後に動かして猶予を延ばせる回数
@@ -78,13 +117,14 @@
   const elNote = document.getElementById('tetris-note');
   const colorsBox = document.getElementById('tetris-colors-box');
   const colorsEl = document.getElementById('tetris-colors');
-  const nextCanvas = document.getElementById('tetris-next');
+  const nextCanvases = ['tetris-next', 'tetris-next2', 'tetris-next3'].map(id => document.getElementById(id));
   const holdCanvas = document.getElementById('tetris-hold');
   const panel = document.getElementById('tetris-panel');
   const panelTitle = document.getElementById('tetris-panel-title');
   const btnPause = document.getElementById('btn-tetris-pause');
   const btnResume = document.getElementById('btn-tetris-resume');
   const btnKeep = document.getElementById('btn-tetris-keep');
+  const btnRetryArt = document.getElementById('btn-tetris-retry-art');
 
   // 遊んでいる間のゲーム状態。遊んでいないときはnull。
   // state: 'intro'（画面切り替え中）| 'playing' | 'paused' | 'over' | 'outro'（終了演出中）
@@ -104,9 +144,9 @@
     return '#' + [f(0), f(8), f(4)].map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
   }
 
-  function pickColor() {
-    const hex = g.palette.length
-      ? g.palette[Math.floor(Math.random() * g.palette.length)]
+  function pickColor(type) {
+    const hex = g.standard ? STANDARD_COLORS[type]
+      : g.palette.length ? g.palette[Math.floor(Math.random() * g.palette.length)]
       : randomHex();
     const u32 = hexToU32(hex);
     g.hexOf.set(u32, hex); // レイヤーに残すときに色へ戻すため
@@ -122,7 +162,15 @@
         [g.bag[i], g.bag[j]] = [g.bag[j], g.bag[i]];
       }
     }
-    return { type: g.bag.pop(), color: pickColor() };
+    const type = g.bag.pop();
+    return { type, color: pickColor(type) };
+  }
+
+  // ネクストの先頭を取り出し、列の最後に新しいブロックを足す
+  function takeNext() {
+    const piece = g.queue.shift();
+    g.queue.push(nextPiece());
+    return piece;
   }
 
   // ── 盤面 ──
@@ -157,8 +205,7 @@
 
   function nextTurn() {
     g.holdUsed = false;
-    spawn(g.next);
-    g.next = nextPiece();
+    spawn(takeNext());
     updateHud();
   }
 
@@ -184,7 +231,7 @@
   function rotate(dir) {
     const c = g.cur;
     const rot = (c.rot + dir + 4) % 4;
-    for (const [kx, ky] of KICKS) {
+    for (const [kx, ky] of kicksFor(c.type, c.rot, rot)) {
       if (!collides(c.type, rot, c.x + kx, c.y + ky)) {
         c.rot = rot;
         c.x += kx;
@@ -214,8 +261,7 @@
     const { type, color } = g.cur;
     const held = g.hold;
     g.hold = { type, color };
-    if (held) spawn(held);
-    else { spawn(g.next); g.next = nextPiece(); }
+    spawn(held || takeNext());
     g.holdUsed = true;
     updateHud();
   }
@@ -270,8 +316,10 @@
     return 1 + Math.floor(g.lines / 10);
   }
 
+  // 1段落ちるまでの時間。本家（ガイドライン）の式：(0.8 - (レベル-1)×0.007)^(レベル-1) 秒
   function fallInterval() {
-    return Math.max(30, 800 * Math.pow(0.85, currentLevel() - 1));
+    const lv = Math.min(currentLevel(), 20);
+    return Math.max(16, 1000 * Math.pow(0.8 - (lv - 1) * 0.007, lv - 1));
   }
 
   // ── 表示 ──
@@ -319,7 +367,7 @@
     elScore.textContent = g.score.toLocaleString();
     elLines.textContent = g.lines.toLocaleString();
     elLevel.textContent = currentLevel();
-    drawPreview(nextCanvas, g.next);
+    nextCanvases.forEach((cv, i) => drawPreview(cv, g.queue[i]));
     drawPreview(holdCanvas, g.hold);
     holdCanvas.style.opacity = g.holdUsed ? 0.4 : 1;
   }
@@ -580,6 +628,7 @@
   function showPanel(title, mode) {
     panelTitle.textContent = title;
     btnResume.style.display = mode === 'paused' ? '' : 'none';
+    btnRetryArt.style.display = g.standard ? 'none' : ''; // 本家モードのキャンバスには絵が無い
     btnKeep.disabled = !g.field.some(Boolean);
     panel.style.display = '';
   }
@@ -640,7 +689,7 @@
     g.held = { left: 0, right: 0, down: 0 };
     g.lastDir = null;
     g.lastShift = 0;
-    g.next = nextPiece();
+    g.queue = Array.from({ length: NEXT_COUNT }, () => nextPiece());
     elMsg.textContent = '';
     hidePanel();
     updateHud();
@@ -648,7 +697,7 @@
 
   function startRound() {
     g.state = 'playing';
-    spawn(nextPiece());
+    spawn(takeNext());
     updateHud();
   }
 
@@ -692,24 +741,28 @@
   }
 
   // ── 開始と終了 ──
-  async function openGame() {
+  // standard: 本家と同じ設定（10×20・ブロックごとに決まった色）で遊ぶ
+  // direct: ホーム画面から直接来た。エディタの部品を消す演出を省き、終了したらホームへ戻る
+  async function openGame({ standard = false, direct = false } = {}) {
     loadRetroFont();
     const body = document.body;
     const center = canvasCenter();
     g = {
       state: 'intro',
+      standard, direct,
       w: cols, h: rows,
-      extras: cols >= EXTRA_MIN_SIZE && rows >= EXTRA_MIN_SIZE,
-      palette: customColors.filter(Boolean),
+      extras: !standard && cols >= EXTRA_MIN_SIZE && rows >= EXTRA_MIN_SIZE,
+      palette: standard ? [] : customColors.filter(Boolean),
       hexOf: new Map(),
       saved: { zoom, x: center.x, y: center.y }, // 終わったらこの表示に戻す
       raf: 0,
     };
     if (document.activeElement) document.activeElement.blur();
 
-    // ① キャンバス以外を画面外へ
+    // ① キャンバス以外を画面外へ（直接来たときは一瞬で消す）
+    if (direct) body.classList.add('tetris-instant');
     body.classList.add('tetris-playing', 'tetris-out');
-    await sleep(UI_OUT_MS);
+    if (!direct) await sleep(UI_OUT_MS);
 
     // ② キャンバスエリアを画面いっぱいにして盤面を用意する
     switchLayout(() => body.classList.add('tetris-stage'));
@@ -725,10 +778,15 @@
     resetBoard(false);
 
     // ③ キャンバスを右へ寄せながら、サイドパネルを左から出す
-    body.classList.add('tetris-side-in');
+    //    （直接来たときは最初から右に置いておき、隠していたページをここで見せる）
     const target = gameViewTarget();
+    if (direct) {
+      placeCanvas(target.zoom, target.x, target.y);
+      document.documentElement.classList.remove('tetris-direct');
+    }
+    body.classList.add('tetris-side-in');
     await Promise.all([
-      moveCanvasStepped(target.zoom, target.x, target.y, SIDE_MS),
+      direct ? null : moveCanvasStepped(target.zoom, target.x, target.y, SIDE_MS),
       sleep(SIDE_MS),
     ]);
 
@@ -769,6 +827,17 @@
     // ③の逆：サイドパネルを引っ込めながら、キャンバスを元の倍率・位置へ戻す
     body.classList.remove('tetris-side-in');
     body.classList.add('tetris-side-out');
+    if (g.direct && !keep) {
+      // ホームから直接来たときは、パネルが引っ込んだらホームへ戻る
+      await sleep(SIDE_MS);
+      location.href = 'index.html';
+      return;
+    }
+    if (g.direct) {
+      // 盤面を残してエディタに移るので、再読み込みでまたテトリスが始まらないようにする
+      // （script.jsのグローバル変数historyはUndo用の配列なので、window.historyを明示する）
+      window.history.replaceState(null, '', location.pathname);
+    }
     await Promise.all([
       moveCanvasStepped(g.saved.zoom, g.saved.x, g.saved.y, SIDE_MS),
       sleep(SIDE_MS),
@@ -780,7 +849,7 @@
     switchLayout(() => body.classList.remove('tetris-stage', 'tetris-side-out'));
 
     // ①の逆：消えていた部品を戻す
-    body.classList.remove('tetris-out');
+    body.classList.remove('tetris-out', 'tetris-instant');
     body.classList.add('tetris-return');
     await sleep(UI_OUT_MS);
     body.classList.remove('tetris-return', 'tetris-playing');
@@ -797,4 +866,20 @@
   document.getElementById('btn-tetris-retry-art').addEventListener('click', () => { if (g) retry(true); });
   btnKeep.addEventListener('click', () => closeGame(true));
   document.getElementById('btn-tetris-quit').addEventListener('click', () => closeGame(false));
+
+  // ホーム画面のテトリスボタン（editor.html?tetris）から来たら、スタート画面を飛ばして
+  // 本家と同じ10×20の盤面ですぐに始める。エディタの読み込み完了時にキャンバスを
+  // 中央へ寄せる処理（script.jsのcenterCanvasOnBoot）が済んでから配置する。
+  if (document.documentElement.classList.contains('tetris-direct')) {
+    const boot = () => {
+      cols = STANDARD_COLS;
+      rows = STANDARD_ROWS;
+      startEditor();
+      syncSlidersToGrid();
+      updatePresetHighlight();
+      openGame({ standard: true, direct: true });
+    };
+    if (document.readyState === 'complete') setTimeout(boot, 0);
+    else window.addEventListener('load', () => setTimeout(boot, 0));
+  }
 })();
