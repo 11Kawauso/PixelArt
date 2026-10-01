@@ -6,12 +6,12 @@ service cloud.firestore {
     // 使い切られたり、無関係なデータの置き場所にされたりするおそれがある。
     // 運営者以外は「作品ファイルとして保存」で自分のフォルダに保存してもらう。
     //
-    // OWNER_UID … Firebaseコンソールの Authentication → ユーザー の
-    //             「ユーザー UID」列にある、自分のアカウントのUIDに置き換える
+    // 下のUIDは運営者のアカウントのもの（Firebaseコンソールの
+    // Authentication → ユーザー の「ユーザー UID」列で確認できる）
     match /users/{uid}/artworks/{artworkId} {
       allow read, write: if request.auth != null
         && request.auth.uid == uid
-        && uid == 'OWNER_UID';
+        && uid == 'B3n2pallCKcjkY3cyJoQg8At3tT2';
     }
   }
 }
