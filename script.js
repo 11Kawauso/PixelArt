@@ -419,17 +419,21 @@ function brushRowRange(row) {
   return { r1: Math.max(0, row - half), r2: Math.min(rows - 1, row - half + brushSize - 1) };
 }
 
-function snapshotHasFilledInCols(snap, r, c1, c2) {
+// 「線を検知」用：描き始めたマスと同じ色（空白なら空白）が続いているかを調べる。
+// 違う色にぶつかったところで止めるため、描き始めが空白なら「線にぶつかるまで」、
+// 色の上から描き始めたなら「その色が続く範囲だけ」を塗る（色の上からでも描ける）。
+// 描画サイズが2以上のときは、太さの範囲の各マスを、描き始めた行（列）の同じ位置のマスと比べる。
+function snapshotSameInCols(snap, r, startRow, c1, c2) {
   for (let c = c1; c <= c2; c++) {
-    if (snap[r] && snap[r][c]) return true;
+    if ((snap[r][c] || null) !== (snap[startRow][c] || null)) return false;
   }
-  return false;
+  return true;
 }
-function snapshotHasFilledInRows(snap, c, r1, r2) {
+function snapshotSameInRows(snap, c, startCol, r1, r2) {
   for (let r = r1; r <= r2; r++) {
-    if (snap[r] && snap[r][c]) return true;
+    if ((snap[r][c] || null) !== (snap[r][startCol] || null)) return false;
   }
-  return false;
+  return true;
 }
 
 function paintRow(r, c1, c2, value) {
@@ -454,11 +458,11 @@ function paintStyle(col, row, value) {
     if (detectLine) {
       const snap = cells.map(r => [...r]);
       for (let r = row; r >= 0; r--) {
-        if (snapshotHasFilledInCols(snap, r, c1, c2)) break;
+        if (!snapshotSameInCols(snap, r, row, c1, c2)) break;
         paintRow(r, c1, c2, value);
       }
       for (let r = row + 1; r < rows; r++) {
-        if (snapshotHasFilledInCols(snap, r, c1, c2)) break;
+        if (!snapshotSameInCols(snap, r, row, c1, c2)) break;
         paintRow(r, c1, c2, value);
       }
     } else {
@@ -469,11 +473,11 @@ function paintStyle(col, row, value) {
     if (detectLine) {
       const snap = cells.map(r => [...r]);
       for (let c = col; c >= 0; c--) {
-        if (snapshotHasFilledInRows(snap, c, r1, r2)) break;
+        if (!snapshotSameInRows(snap, c, col, r1, r2)) break;
         paintCol(c, r1, r2, value);
       }
       for (let c = col + 1; c < cols; c++) {
-        if (snapshotHasFilledInRows(snap, c, r1, r2)) break;
+        if (!snapshotSameInRows(snap, c, col, r1, r2)) break;
         paintCol(c, r1, r2, value);
       }
     } else {
@@ -489,7 +493,7 @@ function applyToolSingle(col, row) {
   if (currentTool === 'pen') {
     paintStyle(col, row, currentColor);
   } else if (currentTool === 'erase') {
-    paintBrush(col, row, null);
+    paintStyle(col, row, null); // 消しゴムもペンと同じく、描画スタイル（縦・横・線を検知）に従う
   } else if (currentTool === 'pick') {
     const c = compositeAt(row, col);
     if (c) { setColor(c); }
@@ -2752,7 +2756,7 @@ detectLineCheck.addEventListener('change', () => {
 });
 
 function updateDrawStyleVisibility() {
-  drawStyleSection.style.display = currentTool === 'pen' ? '' : 'none';
+  drawStyleSection.style.display = currentTool === 'pen' || currentTool === 'erase' ? '' : 'none';
   document.getElementById('move-target-section').style.display = currentTool === 'move' ? '' : 'none';
 }
 
@@ -2812,7 +2816,7 @@ function currentToolLabel() {
   let label = TOOL_LABELS[currentTool] || currentTool;
   const details = [];
   if (currentTool === 'move' && moveAllLayers) details.push('全レイヤー');
-  if (currentTool === 'pen' && DRAW_STYLE_LABELS[drawStyle]) details.push(DRAW_STYLE_LABELS[drawStyle]);
+  if ((currentTool === 'pen' || currentTool === 'erase') && DRAW_STYLE_LABELS[drawStyle]) details.push(DRAW_STYLE_LABELS[drawStyle]);
   if ((currentTool === 'pen' || currentTool === 'erase') && brushSize > 1) details.push(`サイズ${brushSize}`);
   if (details.length) label += `（${details.join('・')}）`;
   return label;
