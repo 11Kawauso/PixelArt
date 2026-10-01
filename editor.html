@@ -10,6 +10,18 @@
   // ホーム画面のテトリスボタン（editor.html?tetris）から来たときは、エディタの画面を
   // 一瞬も見せずにテトリス画面にするため、準備ができるまでページ全体を隠しておく（tetris.jsが外す）
   if (new URLSearchParams(location.search).has('tetris')) document.documentElement.classList.add('tetris-direct');
+  // タブレット（iPadなど）では、道具を左・色を右に並べたお絵かきソフト風のレイアウトにする。
+  // 指で操作する端末のうち、画面の短い辺が600px以上のもの（スマホは除く）。
+  // iPadはトラックパッドをつなぐと指の端末と判定されないことがあるため、別に見分ける。
+  // ?tablet を付けて開くと、パソコンでもこのレイアウトを確認できる。
+  (() => {
+    const touch = matchMedia('(pointer: coarse)').matches
+      || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const forced = new URLSearchParams(location.search).has('tablet');
+    if (forced || (touch && Math.min(screen.width, screen.height) >= 600)) {
+      document.documentElement.classList.add('tablet-ui');
+    }
+  })();
 </script>
 </head>
 <body>
@@ -33,6 +45,10 @@
   <button id="btn-undo" disabled title="元に戻す（Ctrl+Z）">↩ <span class="hide-mobile">元に戻す</span><kbd class="key-hint" data-shortcut="undo">Ctrl+Z</kbd></button>
   <button id="btn-redo" disabled title="やり直し（Ctrl+Y）">↪ <span class="hide-mobile">やり直し</span><kbd class="key-hint" data-shortcut="redo">Ctrl+Y</kbd></button>
   <button id="btn-clear" class="danger">クリア</button>
+
+  <!-- タブレット用：レイヤーと設定のパネルを開くボタン -->
+  <button id="btn-tablet-layers" class="tablet-only" title="レイヤー">🗂</button>
+  <button id="btn-tablet-settings" class="tablet-only" title="設定（グリッドサイズ・画像から変換・トレース・表示など）">⚙️</button>
 
   <!-- ファイルメニュー -->
   <div class="file-menu" id="file-menu">
@@ -91,7 +107,7 @@
     <div class="panel-tab-page" id="panel-tab-draw">
 
     <!-- ツール -->
-    <div class="panel-section">
+    <div class="panel-section" id="tool-section">
       <div class="panel-label">ツール</div>
       <div class="tool-grid">
         <button class="tool-btn active" data-tool="pen" title="ペン（Q）">✏️ ペン<kbd class="key-hint">Q</kbd></button>
@@ -412,6 +428,27 @@
   <!-- パネル開閉ボタン -->
   <button class="panel-toggle" id="panel-toggle" title="パネルの表示切替">◀</button>
 
+  <!-- タブレット用の道具バー（タブレットのときだけ表示。中身の一部は tablet.js がパネルから移す） -->
+  <nav class="tool-rail" id="tool-rail" aria-label="道具">
+    <button class="tool-btn rail-btn active" data-tool="pen" title="ペン">✏️</button>
+    <button class="tool-btn rail-btn" data-tool="fill" title="塗り潰し">🪣</button>
+    <button class="tool-btn rail-btn" data-tool="erase" title="消しゴム">🧹</button>
+    <button class="tool-btn rail-btn" data-tool="pick" title="スポイト">💉</button>
+    <button class="tool-btn rail-btn" data-tool="move" title="移動">✥</button>
+    <div class="rail-sep"></div>
+    <div class="rail-item">
+      <button class="rail-btn" data-popover="rail-pop-select" title="選択・切り取り・コピー・貼り付け">📐</button>
+      <div class="rail-popover" id="rail-pop-select"></div>
+    </div>
+    <div class="rail-item">
+      <button class="rail-btn" data-popover="rail-pop-style" title="描画スタイル（通常・縦一列・横一列）">↕</button>
+      <div class="rail-popover" id="rail-pop-style"></div>
+    </div>
+    <div class="rail-item" id="rail-shape-slot"></div>
+    <div class="rail-spacer"></div>
+    <button class="rail-btn" id="btn-finger-draw">☝️</button>
+  </nav>
+
   <!-- キャンバスエリア（上と左に定規） -->
   <div class="canvas-stage" id="canvas-stage">
     <button class="ruler-corner" id="ruler-corner" title="定規の強調表示を解除"></button>
@@ -431,6 +468,9 @@
       </div>
     </div>
   </div>
+
+  <!-- タブレット用の色パネル（タブレットのときだけ表示。中身は tablet.js がパネルから移す） -->
+  <aside class="color-dock" id="color-dock" aria-label="色"></aside>
 </div>
 
 <!-- スタートモーダル -->
@@ -667,6 +707,7 @@
 </aside>
 
 <script src="script.js"></script>
+<script src="tablet.js"></script>
 <script src="tetris.js"></script>
 <script type="module" src="cloud.js"></script>
 </body>

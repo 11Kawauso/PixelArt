@@ -59,6 +59,8 @@ const statPos   = document.getElementById('stat-pos');
 const statColor = document.getElementById('stat-color');
 const statGrid  = document.getElementById('stat-grid');
 const zoomLabel = document.getElementById('zoom-label');
+// タブレット用レイアウトかどうか（判定は editor.html の head で行う）
+const tabletUI = document.documentElement.classList.contains('tablet-ui');
 
 // 1マスあたりのキャンバス上のピクセル数。
 // 1マスは単色なので、拡大時の見た目の鮮明さは image-rendering: pixelated が
@@ -799,6 +801,9 @@ function floodFill(startCol, startRow, newColor) {
 
 cOv.addEventListener('mousedown', e => {
   if (!started || e.button !== 0) return;
+  // タブレットで指でタップすると、ブラウザがマウス操作を真似して送ってくるため、それでは描かない
+  // （Pencilで描くモードでは指のタップを止めずにスクロールへ回しているので、ここで弾く）
+  if (performance.now() - lastTouchAt < 800) return;
   const {col, row} = getCell(e);
   if (selectionMode === 'range') {
     rangeStart = {col, row};
@@ -942,14 +947,20 @@ let isPinching = false;
 // ズーム中も常にこの点が指の中心の下に留まるようスクロールを補正する。
 let pinchContentX = 0, pinchContentY = 0;
 
-function getTouchDist(e) {
-  const t0 = e.touches[0], t1 = e.touches[1];
+// ピンチに使うタッチ。Pencil で描くモードでは指だけを数える（Pencil と手のひらでピンチにしない）
+function pinchTouches(e) {
+  const all = [...e.touches];
+  return fingersDraw() ? all : all.filter(t => !isStylus(t));
+}
+
+function getTouchDist(touches) {
+  const [t0, t1] = touches;
   const dx = t1.clientX - t0.clientX, dy = t1.clientY - t0.clientY;
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-function getTouchCenter(e) {
-  const t0 = e.touches[0], t1 = e.touches[1];
+function getTouchCenter(touches) {
+  const [t0, t1] = touches;
   return { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
 }
 
@@ -1098,7 +1109,61 @@ function cancelSingleTouchGesture() {
   redrawOverlay();
 }
 
+// ── Apple Pencil と指の使い分け（タブレット） ──
+// タブレットでは、お絵かきソフトと同じく Pencil で描き、指はキャンバスの移動（1本指）と
+// 拡大縮小（2本指）に使う。描いている間に手のひらが画面に触れても描かれない。
+// Pencil を持っていない人のため、道具バーの☝で「指でも描く」に切り替えられる。
+// まだ選んでいないうちは指でも描け、初めて Pencil で触れた時点で「Pencilで描く」に切り替わる。
+const FINGER_DRAW_KEY = 'pixelart-finger-draw';
+let fingerDrawSetting = null; // true: 指でも描く / false: Pencilだけで描く / null: まだ選んでいない
+try {
+  const v = localStorage.getItem(FINGER_DRAW_KEY);
+  if (v === '1' || v === '0') fingerDrawSetting = v === '1';
+} catch (err) { /* 読めなければ未選択として扱う */ }
+
+function fingersDraw() {
+  return !tabletUI || fingerDrawSetting !== false;
+}
+const btnFingerDraw = document.getElementById('btn-finger-draw');
+function updateFingerDrawButton() {
+  const on = fingersDraw();
+  btnFingerDraw.classList.toggle('active', on);
+  btnFingerDraw.title = on
+    ? '指でも描く：オン（押すと Pencil だけで描き、指はキャンバスの移動・拡大縮小に使います）'
+    : '指でも描く：オフ（指はキャンバスの移動・拡大縮小。押すと指でも描けます）';
+}
+function setFingerDraw(on) {
+  fingerDrawSetting = on;
+  try { localStorage.setItem(FINGER_DRAW_KEY, on ? '1' : '0'); } catch (err) { /* 覚えられなくても使える */ }
+  updateFingerDrawButton();
+}
+btnFingerDraw.addEventListener('click', () => setFingerDraw(!fingersDraw()));
+updateFingerDrawButton();
+
+// iPad の Safari では、Apple Pencil のタッチは touchType が 'stylus' になる
+const isStylus = t => t.touchType === 'stylus';
+let penTouchId = null; // 描いている最中の Pencil のタッチ
+// タッチの直後にブラウザが真似して送ってくるマウス操作で描かないよう、最後のタッチ時刻を覚える
+let lastTouchAt = -Infinity;
+const findTouch = (list, id) => [...list].find(t => t.identifier === id);
+
 cOv.addEventListener('touchstart', e => {
+  lastTouchAt = performance.now();
+  // 初めて Pencil で触れたら、指は移動・拡大縮小に使うよう切り替える（まだ選んでいない場合）
+  if (tabletUI && fingerDrawSetting === null && [...e.changedTouches].some(isStylus)) {
+    setFingerDraw(false);
+    showToast('Apple Pencil で描き、指はキャンバスの移動・拡大縮小に使います（左の ☝ で切り替え）');
+  }
+  if (!fingersDraw()) {
+    const pen = [...e.changedTouches].find(isStylus);
+    if (!pen) return; // 指はブラウザのスクロール（移動）と、下のピンチ処理に任せる
+    e.preventDefault();
+    if (!started || penTouchId !== null) return;
+    penTouchId = pen.identifier;
+    const {col, row} = getCell(pen);
+    touchPointerDown(col, row);
+    return;
+  }
   e.preventDefault();
   if (e.touches.length >= 2) return; // ピンチはキャンバスエリア側で扱う
   if (!started) return;
@@ -1113,6 +1178,14 @@ cOv.addEventListener('touchstart', e => {
 }, {passive: false});
 
 cOv.addEventListener('touchmove', e => {
+  if (!fingersDraw()) {
+    const pen = findTouch(e.changedTouches, penTouchId);
+    if (!pen) return;
+    e.preventDefault();
+    const {col, row} = getCell(pen);
+    touchPointerMove(col, row);
+    return;
+  }
   e.preventDefault();
   if (isPinching || e.touches.length >= 2 || !started) return;
   const {col, row} = getCell(e.touches[0]);
@@ -1120,6 +1193,16 @@ cOv.addEventListener('touchmove', e => {
 }, {passive: false});
 
 cOv.addEventListener('touchend', e => {
+  if (!fingersDraw()) {
+    const pen = findTouch(e.changedTouches, penTouchId);
+    if (!pen) return;
+    penTouchId = null;
+    if (started) {
+      const {col, row} = getCell(pen);
+      touchPointerUp(col, row);
+    }
+    return;
+  }
   if (e.touches.length > 0) return;
   singleTouchStart = null;
   const t = e.changedTouches[0];
@@ -1130,31 +1213,42 @@ cOv.addEventListener('touchend', e => {
     isPainting = false; lastCell = null;
   }
 });
-cOv.addEventListener('touchcancel', () => cancelSingleTouchGesture());
+cOv.addEventListener('touchcancel', e => {
+  if (!fingersDraw()) {
+    if (!findTouch(e.changedTouches, penTouchId)) return;
+    penTouchId = null;
+  }
+  cancelSingleTouchGesture();
+});
 
 // ── ピンチで拡大縮小（キャンバスの上でも、周りの余白や定規の上でも） ──
 // キャンバスや定規の上のタッチもここまで伝わってくるので、2本指の操作はすべてここで扱う。
 const pinchArea = document.getElementById('canvas-stage');
 pinchArea.addEventListener('touchstart', e => {
-  if (e.touches.length < 2) return;
+  const touches = pinchTouches(e);
+  if (touches.length < 2) return;
   e.preventDefault(); // ブラウザによるページ全体の拡大縮小を止める
+  if (penTouchId !== null) return; // Pencil で描いている最中は拡大縮小しない
   if (!isPinching) {
-    cancelSingleTouchGesture();
+    if (fingersDraw()) cancelSingleTouchGesture(); // Pencilモードの指は描いていないので取り消す物がない
     cancelRulerDrag(); // 定規の上でピンチを始めたときに、1本目で選んだ強調を取り消す
   }
   isPinching = true;
-  pinchStartDist = getTouchDist(e) || 1;
+  pinchStartDist = getTouchDist(touches) || 1;
   pinchStartZoom = zoom;
-  const ctr = getTouchCenter(e);
+  const ctr = getTouchCenter(touches);
   const wrapRect = wrap.getBoundingClientRect();
   pinchContentX = (ctr.x - wrapRect.left) / pinchStartZoom;
   pinchContentY = (ctr.y - wrapRect.top) / pinchStartZoom;
 }, {passive: false});
 
 pinchArea.addEventListener('touchmove', e => {
-  if (!isPinching || e.touches.length < 2) return;
+  // Pencil で描いている間は、手のひらなどが動いてもキャンバスをスクロールさせない
+  if (penTouchId !== null) { e.preventDefault(); return; }
+  const touches = pinchTouches(e);
+  if (!isPinching || touches.length < 2) return;
   e.preventDefault();
-  const dist = getTouchDist(e);
+  const dist = getTouchDist(touches);
   const scale = dist / pinchStartDist;
   const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinchStartZoom * scale));
 
@@ -1163,7 +1257,7 @@ pinchArea.addEventListener('touchmove', e => {
   // パディング量がzoomに応じて非線形に変わる（updateScrollPadding参照）ため、
   // 比率計算ではなく、実際にレイアウトされたwrapの位置を測定して補正する
   // （マウスホイールズームと同じ方式。詳細はそちらのコメント参照）。
-  const ctr = getTouchCenter(e);
+  const ctr = getTouchCenter(touches);
   const wrapRectNow = wrap.getBoundingClientRect();
   const desiredLeft = ctr.x - pinchContentX * zoom;
   const desiredTop = ctr.y - pinchContentY * zoom;
@@ -1172,8 +1266,9 @@ pinchArea.addEventListener('touchmove', e => {
 }, {passive: false});
 
 // 指を1本ずつ離したとき、残った指で描き始めないよう、全部離れるまでピンチ扱いを続ける
+// （Pencilで描くモードでは指で描かないので、2本未満になった時点で終える）
 function endPinchIfAllLifted(e) {
-  if (e.touches.length === 0) isPinching = false;
+  if (e.touches.length === 0 || (!fingersDraw() && pinchTouches(e).length < 2)) isPinching = false;
 }
 pinchArea.addEventListener('touchend', endPinchIfAllLifted);
 pinchArea.addEventListener('touchcancel', endPinchIfAllLifted);
@@ -3818,11 +3913,18 @@ function centerCanvas() {
   canvasArea.scrollTop  = padY + ch / 2 - canvasArea.clientHeight / 2;
 }
 
+// タブレットでは、キャンバスが小さいと描きにくいので、画面いっぱい近くまで拡大して表示する
+function fitCanvasToView() {
+  const {w, h} = canvasSize();
+  setZoom(Math.min(canvasArea.clientWidth * 0.9 / w, canvasArea.clientHeight * 0.9 / h));
+}
+
 function startEditor() {
   started = true;
   overlay.style.display = 'none';
   initCells(cols, rows, false);
   resizeCanvases();
+  if (tabletUI) fitCanvasToView();
   centerCanvas();
 }
 
@@ -3846,6 +3948,7 @@ function resetToNewCanvas() {
   resizeCanvases();
   syncSlidersToGrid();
   updatePresetHighlight();
+  if (tabletUI) fitCanvasToView();
   centerCanvas();
   if (window.clearCurrentArtwork) window.clearCurrentArtwork();
 }
@@ -3874,10 +3977,12 @@ let panelCollapsed = false;
 let savedPanelWidth = panel.offsetWidth || 260;
 
 function isMobile() { return window.innerWidth <= 640; }
+// パネルを画面の左から引き出す形で使うか（スマホとタブレット）
+function isDrawerLayout() { return isMobile() || tabletUI; }
 
 function syncTogglePosition() {
   panelToggle.textContent = panelCollapsed ? '▶' : '◀';
-  if (isMobile()) {
+  if (isDrawerLayout()) {
     panelToggle.style.left = '0px';
     panelBackdrop.classList.toggle('visible', !panelCollapsed);
     updateColorHistoryPos();
@@ -3933,10 +4038,10 @@ function togglePanel() {
   const anchor = canvasScreenPos();
   if (panelCollapsed) {
     panel.classList.remove('collapsed');
-    if (!isMobile()) panel.style.width = savedPanelWidth + 'px';
+    if (!isDrawerLayout()) panel.style.width = savedPanelWidth + 'px';
     panelCollapsed = false;
   } else {
-    if (!isMobile()) savedPanelWidth = panel.offsetWidth;
+    if (!isDrawerLayout()) savedPanelWidth = panel.offsetWidth;
     panel.classList.add('collapsed');
     panelCollapsed = true;
   }
@@ -3950,10 +4055,11 @@ panelBackdrop.addEventListener('click', () => {
   if (!panelCollapsed) togglePanel();
 });
 
-// モバイル時は初期状態で閉じる
-if (isMobile()) {
-  panel.classList.add('collapsed');
+// スマホ・タブレットでは初期状態で閉じる（開いた状態から閉じていく動きを見せないよう、一瞬で閉じる）
+if (isDrawerLayout()) {
+  panel.classList.add('no-transition', 'collapsed');
   panelCollapsed = true;
+  requestAnimationFrame(() => requestAnimationFrame(() => panel.classList.remove('no-transition')));
 }
 
 // 画面リサイズ時にモード切替
@@ -3967,7 +4073,7 @@ window.addEventListener('resize', () => {
 let isResizing = false;
 let resizeAnchor = null; // ドラッグ中にキャンバスを固定しておく画面座標
 panelResize.addEventListener('mousedown', e => {
-  if (isMobile()) return;
+  if (isDrawerLayout()) return;
   e.preventDefault();
   isResizing = true;
   resizeAnchor = canvasScreenPos();
@@ -4109,6 +4215,7 @@ function loadProjectData(p) {
   resizeCanvases();
   syncSlidersToGrid();
   updateLayerPanel();
+  if (tabletUI) fitCanvasToView();
   centerCanvas();
 }
 

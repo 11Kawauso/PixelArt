@@ -1903,3 +1903,176 @@ body.tetris-instant *:not(.tetris-side) { animation-duration: 0s !important; }
 /* 本家設定で遊ぶときは、盤面を市松模様ではなく白一色にする */
 body.tetris-plain #canvas-bg { visibility: hidden; }
 body.tetris-plain #canvas-wrap { background: #ffffff; }
+
+/* ── タブレット用レイアウト（iPadなど） ──
+   お絵かきソフトのように、左に道具バー・中央にキャンバス・右に色パネルを並べる。
+   縦向きでは色パネルを下に回す。判定は editor.html の head、部品の移動は tablet.js。 */
+.tool-rail,
+.color-dock,
+.tablet-only { display: none; }
+.tablet-ui .tablet-only { display: inline-flex; }
+
+.tablet-ui .app {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 248px;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "rail stage dock";
+}
+.tablet-ui .canvas-stage { grid-area: stage; }
+
+/* 左の道具バー（アイコンだけのボタンを縦に並べる） */
+.tablet-ui .tool-rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  position: relative;
+  z-index: 20; /* 横に開く小窓をキャンバスより上に出す */
+}
+.tablet-ui .tool-rail .rail-btn,
+.tablet-ui .tool-rail .shape-menu-btn {
+  width: 46px;
+  height: 46px;
+  min-width: 0;
+  padding: 0;
+  justify-content: center;
+  font-size: 22px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+}
+.tablet-ui .tool-rail .rail-btn:hover,
+.tablet-ui .tool-rail .shape-menu-btn:hover { background: var(--bg); }
+.tablet-ui .tool-rail .rail-btn.active,
+.tablet-ui .tool-rail .rail-btn.open,
+.tablet-ui .tool-rail .shape-menu-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.tablet-ui .tool-rail .shape-menu-btn img { width: 26px; height: 26px; }
+.rail-sep { width: 34px; height: 1px; background: var(--border); margin: 4px 0; flex-shrink: 0; }
+.rail-spacer { flex: 1; }
+.tablet-ui .rail-item { position: relative; }
+
+/* 道具バーの横に開く小窓（選択・描画スタイル）と図形メニュー */
+.tablet-ui .rail-popover {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: calc(100% + 10px);
+  width: 270px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+.tablet-ui .rail-popover.open { display: block; }
+.tablet-ui .rail-popover .panel-section { border-bottom: none; }
+.tablet-ui .tool-rail .shape-menu { position: relative; top: auto; right: auto; z-index: auto; }
+.tablet-ui .tool-rail .shape-menu-dropdown { top: 0; right: auto; left: calc(100% + 10px); }
+
+/* 右の色パネル */
+.tablet-ui .color-dock {
+  grid-area: dock;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.tablet-ui .color-dock .swatch,
+.tablet-ui .color-dock .swatch-empty { border-radius: 4px; }
+/* 色の履歴（左下に浮かべていたもの）を、色パネルの一番上に置く */
+.tablet-ui .color-dock .color-history {
+  position: static !important;
+  left: auto !important;
+  bottom: auto !important;
+  transition: none;
+}
+
+/* 左パネル（設定・レイヤー）は、ヘッダーの ⚙・🗂 で左から引き出す */
+.tablet-ui .panel {
+  position: fixed;
+  top: 44px;
+  left: 0;
+  bottom: 0;
+  z-index: 100;
+  width: 320px !important;
+  box-shadow: 4px 0 24px rgba(0,0,0,0.15);
+}
+.tablet-ui .panel.collapsed {
+  width: 320px !important;
+  transform: translateX(-100%);
+  box-shadow: none;
+}
+.tablet-ui .panel-backdrop {
+  display: block;
+  position: fixed;
+  inset: 44px 0 0 0;
+  z-index: 99;
+  background: rgba(0,0,0,0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.22s ease;
+}
+.tablet-ui .panel-backdrop.visible { opacity: 1; pointer-events: auto; }
+/* 道具バー・色パネルに移した物、タブレットでは使わない物は隠す */
+.tablet-ui #tool-section,
+.tablet-ui .panel-toggle,
+.tablet-ui .panel-resize,
+.tablet-ui #btn-dock-layers { display: none !important; }
+
+/* キャンバスの枠の中に移したボタン類 */
+.tablet-ui .canvas-stage .zoom-controls { position: absolute; right: 12px; bottom: 12px; }
+.tablet-ui .canvas-stage .ref-toggle { position: absolute; top: 30px; right: 12px; }
+/* 色の選択窓は、色パネルのある右側に出す */
+.tablet-ui #color-pick-modal { justify-content: flex-end; padding-left: 0; padding-right: 264px; }
+
+/* 縦向き：色パネルは下に横長で置く */
+@media (orientation: portrait) {
+  .tablet-ui .app {
+    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-areas: "rail stage" "dock dock";
+  }
+  /* 左の列に「今の色・描画サイズ（移動ツールのときは移動の対象）」、その右にカラーとカスタムカラー */
+  .tablet-ui .color-dock {
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      "current palette custom"
+      "brush   palette custom"
+      "move    palette custom";
+    border-left: none;
+    border-top: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .tablet-ui .color-dock > .panel-section { border-bottom: none; padding: 10px 12px; }
+  .tablet-ui .color-dock .dock-current { grid-area: current; }
+  .tablet-ui .color-dock .dock-brush { grid-area: brush; }
+  .tablet-ui .color-dock .dock-move { grid-area: move; }
+  .tablet-ui .color-dock .dock-palette { grid-area: palette; border-left: 1px solid var(--border); }
+  .tablet-ui .color-dock .dock-custom { grid-area: custom; border-left: 1px solid var(--border); }
+  .tablet-ui .color-dock .palette-grid { grid-template-columns: repeat(12, 1fr); }
+  .tablet-ui #color-pick-modal { justify-content: center; padding-right: 0; align-items: flex-end; padding-bottom: 260px; }
+}
+
+/* PEPORIS・絵の確認モードでは、道具バーと色パネルもほかの部品と同じく消す */
+@keyframes tetris-out-right  { to { transform: translateX(100%); } }
+@keyframes tetris-back-left  { from { transform: translateX(100%); } to { transform: none; } }
+body.tetris-out .tool-rail { animation: tetris-out-left 1.2s steps(6, end) forwards; }
+body.tetris-out .color-dock { animation: tetris-out-right 1.2s steps(6, end) forwards; }
+body.tetris-return .tool-rail { animation: tetris-back-right 1.2s steps(6, end); }
+body.tetris-return .color-dock { animation: tetris-back-left 1.2s steps(6, end); }
+body.tetris-playing .tool-rail,
+body.tetris-playing .color-dock { pointer-events: none; }
+body.art-preview .tool-rail,
+body.art-preview .color-dock,
+body.art-preview .color-dock * { visibility: hidden !important; }
