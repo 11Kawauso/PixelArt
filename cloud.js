@@ -62,6 +62,14 @@ function showToast(msg, isError) {
   toastTimer = setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
 }
 
+// クラウド保存の失敗メッセージ。クラウド保存は運営者のアカウントだけが使える設定（firestore.rules）なので、それ以外の人には自分のフォルダに保存する方法を案内する
+function cloudErrorText(prefix, err) {
+  if (err && err.code === 'permission-denied') {
+    return 'クラウド保存は運営者専用です。「保存 ▸ 作品ファイルとして保存」をお使いください';
+  }
+  return prefix + (err.code || err.message);
+}
+
 // script.jsの「新規キャンバス」から呼ばれる。開いている作品の紐付けを解除する。
 window.clearCurrentArtwork = () => setCurrentArtwork(null, '');
 // script.jsの自動保存から呼ばれる。開いている作品を記録・復元するのに使う。
@@ -119,7 +127,7 @@ btnLogin.addEventListener('click', async () => {
     await signInWithPopup(auth, new GoogleAuthProvider());
   } catch (err) {
     if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-      showToast('ログインに失敗しました: ' + (err.code || err.message), true);
+      showToast(cloudErrorText('ログインに失敗しました: ', err), true);
     }
   }
 });
@@ -181,7 +189,7 @@ btnSaveOk.addEventListener('click', async () => {
     setCurrentArtwork(id, name);
     showToast(`「${name}」を保存しました`);
   } catch (err) {
-    showToast('保存に失敗しました: ' + (err.code || err.message), true);
+    showToast(cloudErrorText('保存に失敗しました: ', err), true);
   }
 });
 
@@ -202,7 +210,7 @@ btnSaveOver.addEventListener('click', () => {
   if (currentArtworkId) {
     saveArtwork(currentArtworkName, currentArtworkId)
       .then(() => showToast(`「${currentArtworkName}」に上書き保存しました`))
-      .catch(err => showToast('保存に失敗しました: ' + (err.code || err.message), true));
+      .catch(err => showToast(cloudErrorText('保存に失敗しました: ', err), true));
   } else {
     openGallery('overwrite');
   }
@@ -225,7 +233,7 @@ async function renderGallery(mode) {
     snap = await getDocs(query(artworksCol(user.uid), orderBy('updatedAt', 'desc')));
   } catch (err) {
     galleryList.innerHTML = '';
-    showToast('読み込みに失敗しました: ' + (err.code || err.message), true);
+    showToast(cloudErrorText('読み込みに失敗しました: ', err), true);
     return;
   }
   galleryList.innerHTML = '';
@@ -278,7 +286,7 @@ async function renderGallery(mode) {
           galleryModal.style.display = 'none';
           showToast(`「${name}」に上書き保存しました`);
         } catch (err) {
-          showToast('保存に失敗しました: ' + (err.code || err.message), true);
+          showToast(cloudErrorText('保存に失敗しました: ', err), true);
         }
       });
       actions.appendChild(btnOver);
@@ -316,7 +324,7 @@ async function renderGallery(mode) {
           }
           showToast('削除しました');
         } catch (err) {
-          showToast('削除に失敗しました: ' + (err.code || err.message), true);
+          showToast(cloudErrorText('削除に失敗しました: ', err), true);
         }
       });
       actions.appendChild(btnOpen);
@@ -349,7 +357,7 @@ btnStartGallery.addEventListener('click', async () => {
     openGallery('browse');
   } catch (err) {
     if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-      showToast('ログインに失敗しました: ' + (err.code || err.message), true);
+      showToast(cloudErrorText('ログインに失敗しました: ', err), true);
     }
   }
 });

@@ -1862,8 +1862,8 @@ function showPaletteHint(text) {
   customPaletteHint.style.display = text ? '' : 'none';
 }
 
-function downloadText(filename, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+function downloadText(filename, text, type = 'text/plain') {
+  const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
@@ -4072,10 +4072,12 @@ function decodeLayerCells(sl, c, r) {
     p++;
   };
   for (const token of sl.data.split(',')) {
+    if (p >= c * r) break;
     const [v, n] = token.split('*');
     const idx = parseInt(v, 10) || 0;
     const count = n ? parseInt(n, 10) : 1;
-    for (let i = 0; i < count; i++) put(idx);
+    // 壊れたファイルで連続数が極端に大きくても固まらないよう、キャンバスの残りマス数までにする
+    for (let i = 0; i < count && p < c * r; i++) put(idx);
   }
   return cells;
 }
@@ -4177,6 +4179,103 @@ function markProjectSaved() {
   scheduleAutosave();
 }
 window.markProjectSaved = markProjectSaved;
+
+// ── 作品ファイル（自分のフォルダに保存・開く） ─────────
+// レイヤーなども含めた作品を1つのファイルとして保存し、あとで開いて続きを編集できるようにする。
+// 中身はクラウド保存と同じ形式（serializeProject）を包んだJSON。
+// 保存先を選べるブラウザ（パソコンのChrome・Edgeなど）では保存場所を選ぶ画面を出し、
+// それ以外では通常のダウンロードとして保存する。
+const PROJECT_FILE_APP = 'SuperDotEditor-KAI';
+const PROJECT_FILE_EXT = '.dotkai.json';
+const toastEl = document.getElementById('cloud-toast');
+let toastTimer = null;
+function showToast(msg, isError) {
+  toastEl.textContent = msg;
+  toastEl.classList.toggle('error', !!isError);
+  toastEl.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
+}
+
+function projectFileName() {
+  const art = window.getCurrentArtwork && window.getCurrentArtwork();
+  const base = (art && art.name) || `dot-art_${cols}x${rows}`;
+  return base.replace(/[\\/:*?"<>|]/g, '_') + PROJECT_FILE_EXT; // ファイル名に使えない文字は置き換える
+}
+
+async function saveProjectFile() {
+  closeFileMenu();
+  if (!started) return;
+  const text = JSON.stringify({ app: PROJECT_FILE_APP, format: 1, project: serializeProject() });
+  const name = projectFileName();
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{ description: 'スーパードットエディター・改の作品', accept: { 'application/json': ['.json'] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(text);
+      await writable.close();
+      markProjectSaved();
+      showToast(`「${handle.name}」に保存しました`);
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return; // 保存先の選択をキャンセルした
+      // それ以外で使えなかったときは、通常のダウンロードで保存する
+    }
+  }
+  downloadText(name, text, 'application/json');
+  markProjectSaved();
+}
+
+// 作品ファイルの中身を確かめて、読み込める形に整える（壊れたファイルや別のJSONならnull）
+function sanitizeProjectFile(data) {
+  const p = data && data.app === PROJECT_FILE_APP ? data.project : null;
+  if (!p || !Array.isArray(p.layers) || !Number.isFinite(p.cols) || !Number.isFinite(p.rows)) return null;
+  return {
+    cols: Math.round(p.cols),
+    rows: Math.round(p.rows),
+    layers: p.layers.slice(0, 100).map(l => ({
+      name: typeof l.name === 'string' ? l.name.slice(0, 50) : 'レイヤー',
+      visible: l.visible !== false,
+      opacity: typeof l.opacity === 'number' && l.opacity >= 0 && l.opacity <= 1 ? l.opacity : 1,
+      locked: !!l.locked,
+      // 色として使えない値は透明として扱う
+      palette: Array.isArray(l.palette)
+        ? l.palette.map(h => (typeof h === 'string' && /^#[0-9a-f]{6}$/i.test(h) ? h.toLowerCase() : null))
+        : [],
+      data: typeof l.data === 'string' ? l.data : '',
+    })),
+  };
+}
+
+const projectFileInput = document.getElementById('project-file-input');
+function openProjectFile() {
+  closeFileMenu();
+  projectFileInput.value = ''; // 同じファイルを続けて選んでも読み込まれるように
+  projectFileInput.click();
+}
+projectFileInput.addEventListener('change', async () => {
+  const file = projectFileInput.files[0];
+  if (!file) return;
+  let project = null;
+  try {
+    project = sanitizeProjectFile(JSON.parse(await file.text()));
+  } catch (err) { /* JSONとして読めない */ }
+  if (!project) {
+    showToast('作品ファイルとして読み込めませんでした', true);
+    return;
+  }
+  loadProjectData(project);
+  if (window.clearCurrentArtwork) window.clearCurrentArtwork(); // クラウド作品との紐付けは外す
+  markProjectSaved(); // 開いた直後は保存済みの状態。自動保存にも反映する
+  showToast(`「${file.name}」を開きました`);
+});
+
+document.getElementById('btn-save-file').addEventListener('click', saveProjectFile);
+document.getElementById('btn-open-file').addEventListener('click', openProjectFile);
+document.getElementById('btn-start-open-file').addEventListener('click', openProjectFile);
 
 function readAutosave() {
   try {
