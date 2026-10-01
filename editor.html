@@ -366,6 +366,10 @@
         <input type="checkbox" id="show-rulers" checked style="accent-color:var(--accent)">
         定規を表示
       </label>
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:6px;" title="マス数が偶数なら真ん中のマスの境目に線を、奇数なら真ん中の列・行を色付けして表示します">
+        <input type="checkbox" id="show-center-lines" checked style="accent-color:var(--accent)">
+        中心線を表示
+      </label>
       <div class="layer-hint">D キー（または右下の 👁）を押している間は、描いた絵だけを表示します</div>
     </div>
 
@@ -473,6 +477,9 @@
           <div id="canvas-grid"></div>
           <div class="line-highlight" id="col-highlight" style="display:none"></div>
           <div class="line-highlight" id="row-highlight" style="display:none"></div>
+          <!-- 中心線（位置と形は script.js の updateCenterLines が決める） -->
+          <div class="center-line center-line-v" id="center-line-v"></div>
+          <div class="center-line center-line-h" id="center-line-h"></div>
           <canvas id="canvas-overlay"></canvas>
         </div>
       </div>

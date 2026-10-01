@@ -311,6 +311,25 @@ function updateGridOverlay() {
   if (visible) gridOverlay.style.setProperty('--cell-size', displayed + 'px');
   // 1マスの表示サイズやマス数が変わったので、定規と列・行の強調も合わせる
   updateLineHighlights();
+  updateCenterLines();
+}
+
+// ── 中心線 ──
+// キャンバスの縦・横それぞれの真ん中に線を出す。マス数が偶数なら真ん中のマスとマスの
+// 境目に1本の線を、奇数なら真ん中の1列（1行）を薄く色付けして両側に線を引く。
+// 位置はキャンバスに対する割合で指定するので、拡大縮小しても付いてくる。
+// （起動直後にも呼ばれるため、要素や設定はその都度取り出す）
+function updateCenterLines() {
+  const show = document.getElementById('show-center-lines').checked;
+  placeCenterLine(document.getElementById('center-line-v'), cols, 'left', 'width', show);
+  placeCenterLine(document.getElementById('center-line-h'), rows, 'top', 'height', show);
+}
+function placeCenterLine(el, count, posProp, sizeProp, show) {
+  el.style.display = show ? '' : 'none';
+  const odd = count % 2 === 1;
+  el.classList.toggle('odd', odd);
+  el.style[posProp] = odd ? `${Math.floor(count / 2) / count * 100}%` : '50%';
+  el.style[sizeProp] = odd ? `${100 / count}%` : '0';
 }
 
 function drawGrid() {
@@ -3055,6 +3074,18 @@ document.getElementById('btn-resize').addEventListener('click', () => {
 document.getElementById('show-grid').addEventListener('change', e => {
   showGrid = e.target.checked;
   drawGrid();
+});
+
+// 中心線の表示・非表示は、このブラウザに記憶して次に開いたときも同じにする
+const SHOW_CENTER_LINES_KEY = 'pixelart-show-center-lines';
+const showCenterLinesCheckbox = document.getElementById('show-center-lines');
+try {
+  if (localStorage.getItem(SHOW_CENTER_LINES_KEY) === '0') showCenterLinesCheckbox.checked = false;
+} catch (err) { /* 読めなければ表示する */ }
+updateCenterLines();
+showCenterLinesCheckbox.addEventListener('change', () => {
+  try { localStorage.setItem(SHOW_CENTER_LINES_KEY, showCenterLinesCheckbox.checked ? '1' : '0'); } catch (err) { /* 覚えられなくても切り替えはできる */ }
+  updateCenterLines();
 });
 
 // ── 定規と列・行の強調 ────────────────────────────────

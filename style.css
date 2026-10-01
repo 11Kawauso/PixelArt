@@ -668,6 +668,22 @@ input, select, textarea {
   box-shadow: inset 0 0 0 1px rgba(230, 140, 0, 0.85);
 }
 
+/* 中心線（キャンバスの縦・横の真ん中）。偶数マスは境目に1本の線、奇数マスは真ん中の列・行を色付けして
+   両側に線を引く。グリッド線や列・行の強調（黄色）と見分けやすいよう青にする。 */
+.center-line {
+  --center-line: rgba(0, 132, 255, 0.75);
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+}
+.center-line-v { top: 0; bottom: 0; }
+.center-line-h { left: 0; right: 0; }
+.center-line-v:not(.odd) { border-left: 2px solid var(--center-line); transform: translateX(-1px); }
+.center-line-h:not(.odd) { border-top: 2px solid var(--center-line); transform: translateY(-1px); }
+.center-line.odd { background: rgba(0, 132, 255, 0.12); }
+.center-line-v.odd { box-shadow: inset 1px 0 0 var(--center-line), inset -1px 0 0 var(--center-line); }
+.center-line-h.odd { box-shadow: inset 0 1px 0 var(--center-line), inset 0 -1px 0 var(--center-line); }
+
 .line-input-row {
   display: flex;
   align-items: center;
@@ -1509,7 +1525,8 @@ body.art-preview #canvas-bg,
 body.art-preview #canvas-trace,
 body.art-preview #canvas-grid,
 body.art-preview #canvas-overlay,
-body.art-preview .line-highlight {
+body.art-preview .line-highlight,
+body.art-preview .center-line {
   visibility: hidden !important;
 }
 body.art-preview #canvas-wrap { box-shadow: none; }
@@ -1706,7 +1723,8 @@ body.tetris-out .ref-toggle,
 body.tetris-out .ref-window,
 body.tetris-out .ruler,
 body.tetris-out .ruler-corner,
-body.tetris-out .line-highlight { animation: tetris-fade-out 1.2s steps(4, end) forwards; }
+body.tetris-out .line-highlight,
+body.tetris-out .center-line { animation: tetris-fade-out 1.2s steps(4, end) forwards; }
 
 /* 終了時は同じ動きを逆向きにして戻ってくる */
 body.tetris-return header { animation: tetris-back-down 1.2s steps(6, end); }
@@ -1720,7 +1738,8 @@ body.tetris-return .ref-toggle,
 body.tetris-return .ref-window,
 body.tetris-return .ruler,
 body.tetris-return .ruler-corner,
-body.tetris-return .line-highlight { animation: tetris-fade-in 1.2s steps(4, end); }
+body.tetris-return .line-highlight,
+body.tetris-return .center-line { animation: tetris-fade-in 1.2s steps(4, end); }
 
 /* ② 消え終わったら、キャンバスエリアを画面いっぱいに広げてテトリス画面にする。
    描いた絵は隠し（足場にする場合は盤面側に写してある）、定規とスクロールバーも出さない。 */
@@ -1732,7 +1751,8 @@ body.tetris-stage .canvas-stage {
 body.tetris-stage #canvas-main,
 body.tetris-stage .ruler,
 body.tetris-stage .ruler-corner,
-body.tetris-stage .line-highlight { display: none !important; }
+body.tetris-stage .line-highlight,
+body.tetris-stage .center-line { display: none !important; }
 body.tetris-stage .canvas-area { scrollbar-width: none; cursor: grab; }
 body.tetris-stage .canvas-area::-webkit-scrollbar { display: none; }
 body.tetris-stage .canvas-area.tetris-grabbing { cursor: grabbing; }
