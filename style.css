@@ -456,23 +456,50 @@ button:disabled { opacity: 0.4; cursor: default; transform: none; }
   padding-left: 16px;
 }
 /* 色選択モーダルだけは背景を暗くしない。
-   ブラウザ標準の色ピッカーのスポイトは画面に表示されている色をそのまま拾うため、
-   暗いオーバーレイが重なっているとパレットから吸った色まで暗くなってしまう。
+   「画面から色を拾う」（💉）は画面に表示されている色をそのまま拾うため、
+   暗いオーバーレイが重なっているとパレットから拾った色まで暗くなってしまう。
    代わりにカード側の影を濃くして、モーダルが開いていることを分かるようにする。 */
 #color-pick-modal { background: transparent; }
 #color-pick-modal .confirm-card { box-shadow: 0 8px 32px rgba(0,0,0,0.28); }
 
 .confirm-card p { font-size: 13px; margin-bottom: 14px; }
-.color-pick-input {
-  width: 100%;
-  height: 48px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  padding: 2px;
-  cursor: pointer;
-  background: var(--surface);
+
+/* 輪っか状のカラーピッカー */
+.color-pick-card { padding: 16px 18px; }
+.color-wheel { display: flex; justify-content: center; margin-bottom: 12px; }
+.color-wheel-canvas { display: block; cursor: crosshair; }
+.color-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 14px;
 }
+/* 左に元の色、右に新しい色を並べて見比べる */
+.color-compare {
+  display: flex;
+  flex-shrink: 0;
+  width: 56px;
+  height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.color-compare span { flex: 1; }
+.color-hex-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+}
+#btn-color-eyedropper { width: 34px; height: 30px; padding: 0; justify-content: center; flex-shrink: 0; }
+/* パレット下の「🎨 色を選ぶ」 */
+.color-wheel-open { width: 100%; justify-content: center; margin-top: 2px; }
 .confirm-actions { display: flex; gap: 8px; justify-content: center; }
 
 /* PNG保存の倍率ボタン（倍率＋保存される大きさの2行） */

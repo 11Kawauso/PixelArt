@@ -1801,7 +1801,11 @@ function pushColorHistory(hex) {
 }
 
 colorDots.forEach((dot, i) => {
-  dot.addEventListener('click', () => { if (colorHistoryList[i]) setColor(colorHistoryList[i]); });
+  dot.addEventListener('click', () => {
+    // 一番大きい丸（今の色）は、押すとカラーピッカーで色を選べる
+    if (i === 0) { openColorPicker('current', -1, currentColor); return; }
+    if (colorHistoryList[i]) setColor(colorHistoryList[i]);
+  });
 });
 
 function setColor(hex) {
@@ -1851,7 +1855,7 @@ let deleteMode = false;
 let pendingSlotIndex = -1;
 // 色選択モーダル・全削除確認モーダルは「カスタムカラー」と
 // 「画像から変換に使う色」で共用するため、対象を覚えておく。
-let pendingSlotTarget = 'custom'; // 'custom' | 'convert'
+let pendingSlotTarget = 'custom'; // 'custom' | 'convert' | 'current'（今の色を直接変える）
 let deleteAllTarget = 'custom';   // 'custom' | 'convert' | 'import'（パレット読み込みの上書き確認）
 
 function buildCustomPalette() {
@@ -1879,11 +1883,7 @@ function buildCustomPalette() {
         s.style.opacity = '0.3';
         s.style.pointerEvents = 'none';
       }
-      s.addEventListener('click', () => {
-        pendingSlotIndex = i;
-        pendingSlotTarget = 'custom';
-        document.getElementById('color-pick-modal').style.display = 'flex';
-      });
+      s.addEventListener('click', () => openColorPicker('custom', i, currentColor));
       customPaletteGrid.appendChild(s);
     }
   });
@@ -1891,25 +1891,90 @@ function buildCustomPalette() {
   saveCustomColors();
 }
 
-document.getElementById('btn-color-ok').addEventListener('click', () => {
-  if (pendingSlotIndex >= 0) {
-    if (pendingSlotTarget === 'convert') {
-      convertPaletteColors[pendingSlotIndex] = customColorPicker.value;
-      buildConvertPalette();
-    } else {
-      customColors[pendingSlotIndex] = customColorPicker.value;
-      setColor(customColorPicker.value);
-      buildCustomPalette();
-    }
-    pendingSlotIndex = -1;
-  }
-  document.getElementById('color-pick-modal').style.display = 'none';
+// ── 色選択モーダル（輪っか状のカラーピッカー） ──
+// 外側の輪で色相、内側の四角で鮮やかさと明るさを選ぶ（colorwheel.js）。
+// カスタムカラーの「＋」、画像変換に使う色の「＋」、パレット下の「🎨 色を選ぶ」、
+// 色履歴の一番大きい丸（今の色）から開く。
+const colorPickModal = document.getElementById('color-pick-modal');
+// パネルを閉じている間（スマホ・タブレットでは画面外へずらしている）でも開けるよう、パネルの外に出しておく
+document.body.appendChild(colorPickModal);
+const colorOldEl = document.getElementById('color-old');
+const colorNewEl = document.getElementById('color-new');
+const colorHexInput = document.getElementById('color-hex');
+const btnColorEyedropper = document.getElementById('btn-color-eyedropper');
+
+function showPickedColor(hex, fromHexInput) {
+  customColorPicker.value = hex;
+  colorNewEl.style.background = hex;
+  if (!fromHexInput) colorHexInput.value = hex;
+}
+const colorWheel = new ColorWheel(document.getElementById('color-wheel'), {
+  size: 220,
+  onChange: hex => showPickedColor(hex, false),
 });
 
-document.getElementById('btn-color-cancel').addEventListener('click', () => {
+function openColorPicker(target, index, initialHex) {
+  pendingSlotTarget = target;
+  pendingSlotIndex = index;
+  colorWheel.setHex(initialHex);
+  colorOldEl.style.background = initialHex;
+  showPickedColor(colorWheel.getHex(), false);
+  colorPickModal.style.display = 'flex';
+}
+
+function closeColorPicker() {
   pendingSlotIndex = -1;
-  document.getElementById('color-pick-modal').style.display = 'none';
+  colorPickModal.style.display = 'none';
+}
+
+// コードを直接打ち込んだときは、正しい形（#なしでも可）になった時点でピッカーにも反映する
+colorHexInput.addEventListener('input', () => {
+  let v = colorHexInput.value.trim();
+  if (!v.startsWith('#')) v = '#' + v;
+  if (/^#[0-9a-f]{6}$/i.test(v)) {
+    colorWheel.setHex(v.toLowerCase());
+    showPickedColor(v.toLowerCase(), true);
+  }
 });
+colorHexInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btn-color-ok').click();
+  if (e.key === 'Escape') closeColorPicker();
+});
+
+// 画面上の好きな場所から色を拾う（パソコンのChrome・Edgeなど、対応しているブラウザだけ）
+if (window.EyeDropper) {
+  btnColorEyedropper.style.display = '';
+  btnColorEyedropper.addEventListener('click', async () => {
+    try {
+      const { sRGBHex } = await new EyeDropper().open();
+      colorWheel.setHex(sRGBHex.toLowerCase());
+      showPickedColor(sRGBHex.toLowerCase(), false);
+    } catch (err) { /* Escキーなどで取り消した */ }
+  });
+}
+
+document.getElementById('btn-open-color-wheel').addEventListener('click', () => {
+  openColorPicker('current', -1, currentColor);
+});
+
+document.getElementById('btn-color-ok').addEventListener('click', () => {
+  const hex = customColorPicker.value;
+  if (pendingSlotTarget === 'current') {
+    setColor(hex);
+  } else if (pendingSlotIndex >= 0) {
+    if (pendingSlotTarget === 'convert') {
+      convertPaletteColors[pendingSlotIndex] = hex;
+      buildConvertPalette();
+    } else {
+      customColors[pendingSlotIndex] = hex;
+      setColor(hex);
+      buildCustomPalette();
+    }
+  }
+  closeColorPicker();
+});
+
+document.getElementById('btn-color-cancel').addEventListener('click', closeColorPicker);
 
 btnDeleteMode.addEventListener('click', () => {
   deleteMode = !deleteMode;
@@ -2122,11 +2187,7 @@ function buildConvertPalette() {
         s.style.opacity = '0.3';
         s.style.pointerEvents = 'none';
       }
-      s.addEventListener('click', () => {
-        pendingSlotIndex = i;
-        pendingSlotTarget = 'convert';
-        document.getElementById('color-pick-modal').style.display = 'flex';
-      });
+      s.addEventListener('click', () => openColorPicker('convert', i, currentColor));
     }
     convertPaletteGrid.appendChild(s);
   });

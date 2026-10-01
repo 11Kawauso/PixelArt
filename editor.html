@@ -210,6 +210,7 @@
     <div class="panel-section">
       <div class="panel-label">カラー</div>
       <div class="palette-grid" id="palette"></div>
+      <button id="btn-open-color-wheel" class="color-wheel-open" title="輪っか状のカラーピッカーで、描く色を自由に選ぶ">🎨 色を選ぶ</button>
     </div>
 
     <!-- カスタムカラーパレット -->
@@ -244,13 +245,22 @@
 
     <!-- 色選択モーダル -->
     <div class="confirm-modal modal-left" id="color-pick-modal" style="display:none">
-      <div class="confirm-card">
+      <div class="confirm-card color-pick-card">
         <p>色を選択してください</p>
-        <div class="confirm-actions" style="margin-bottom:14px;">
+        <!-- 輪っか状のカラーピッカー（colorwheel.js が描く） -->
+        <div class="color-wheel" id="color-wheel"></div>
+        <div class="color-pick-row">
+          <div class="color-compare" title="左：元の色　右：新しい色">
+            <span id="color-old"></span><span id="color-new"></span>
+          </div>
+          <input type="text" id="color-hex" class="color-hex-input" maxlength="7" spellcheck="false" autocomplete="off" aria-label="色のコード（#RRGGBB）">
+          <button id="btn-color-eyedropper" title="画面から色を拾う" style="display:none">💉</button>
+        </div>
+        <input type="hidden" id="custom-color-picker" value="#ff0000">
+        <div class="confirm-actions">
           <button id="btn-color-ok" class="primary">OK</button>
           <button id="btn-color-cancel">キャンセル</button>
         </div>
-        <input type="color" id="custom-color-picker" value="#ff0000" class="color-pick-input">
       </div>
     </div>
 
@@ -535,7 +545,7 @@
   <div class="color-dot dot-small" id="dot-3" title="3つ前の色"></div>
   <div class="color-dot dot-medium" id="dot-2" title="2つ前の色"></div>
   <div class="color-dot dot-large" id="dot-1" title="1つ前の色"></div>
-  <div class="color-dot dot-xl" id="dot-0" title="現在の色"></div>
+  <div class="color-dot dot-xl" id="dot-0" title="現在の色（押すとカラーピッカーで色を選べます）"></div>
 </div>
 
 <!-- ズーム（画面右下固定） -->
@@ -706,6 +716,7 @@
   </div>
 </aside>
 
+<script src="colorwheel.js"></script>
 <script src="script.js"></script>
 <script src="tablet.js"></script>
 <script src="tetris.js"></script>
