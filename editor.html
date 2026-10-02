@@ -207,15 +207,21 @@
     </div>
 
     <!-- カラー -->
-    <div class="panel-section">
-      <div class="panel-label">カラー</div>
+    <!-- 右上のボタンで中身（.popout-body）を画面上の小窓に切り出せる（script.js の「パレットの切り出し」） -->
+    <div class="panel-section" data-popout="color" data-popout-title="カラー">
+      <div class="panel-label panel-label-row">カラー<button class="popout-btn" title="パネルから切り出して、画面の好きな場所に置く"></button></div>
+      <div class="popout-placeholder">画面に切り出しています</div>
+      <div class="popout-body">
       <div class="palette-grid" id="palette"></div>
       <button id="btn-open-color-wheel" class="color-wheel-open" title="輪っか状のカラーピッカーで、描く色を自由に選ぶ">🎨 色を選ぶ</button>
+      </div>
     </div>
 
     <!-- カスタムカラーパレット -->
-    <div class="panel-section">
-      <div class="panel-label">カスタムカラー</div>
+    <div class="panel-section" data-popout="custom" data-popout-title="カスタムカラー">
+      <div class="panel-label panel-label-row">カスタムカラー<button class="popout-btn" title="パネルから切り出して、画面の好きな場所に置く"></button></div>
+      <div class="popout-placeholder">画面に切り出しています</div>
+      <div class="popout-body">
       <div class="palette-grid" id="custom-palette"></div>
       <div class="custom-palette-actions">
         <button id="btn-delete-mode">削除</button>
@@ -227,6 +233,7 @@
       </div>
       <input type="file" id="palette-file-input" accept=".hex,.gpl,.pal,.txt,.png,.gif,.bmp" style="display:none">
       <div class="layer-hint" id="custom-palette-hint" style="display:none"></div>
+      </div>
     </div>
 
     <!-- パレット書き出し形式の選択モーダル -->

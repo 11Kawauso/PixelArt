@@ -1010,6 +1010,74 @@ input, select, textarea {
                     transparent 72%, var(--border-strong) 72%, var(--border-strong) 80%, transparent 80%);
 }
 
+/* ── パレットの切り出し ──
+   「カラー」「カスタムカラー」の右上のボタンで、中身を画面上の小窓に移して自由に動かせる */
+.panel-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.popout-btn {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  margin: -4px 0;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+/* 四角から矢印が飛び出すアイコン */
+.popout-btn::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 3H3.5a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1H12a1 1 0 0 0 1-1V9'/%3E%3Cpath d='M9.5 2.5h4v4M13.5 2.5 8 8'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='black' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 3H3.5a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1H12a1 1 0 0 0 1-1V9'/%3E%3Cpath d='M9.5 2.5h4v4M13.5 2.5 8 8'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.popout-btn:hover { color: var(--text); border-color: var(--border-strong); }
+.popout-btn.active,
+.popout-btn.active:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
+.popout-placeholder {
+  display: none;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.panel-section.popped-out .popout-placeholder { display: block; }
+/* タブレットは色パネルが右に常に出ているので切り出さない */
+.tablet-ui .popout-btn { display: none; }
+
+/* 切り出した小窓。位置と幅はscript.jsで指定する */
+.float-palette {
+  position: fixed;
+  z-index: 56; /* 参考画像(55)より手前、図形メニュー(60)より奥 */
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0,0,0,0.18);
+  touch-action: none;
+}
+.float-palette.front { z-index: 57; }
+.float-palette .ref-header { cursor: move; user-select: none; }
+.float-palette-body { padding: 10px; }
+.float-palette-body .palette-grid { margin-bottom: 0; }
+.float-palette-body .color-wheel-open { margin: 8px 0 0; }
+.float-palette-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: ew-resize;
+  background:
+    linear-gradient(135deg, transparent 50%, var(--border-strong) 50%, var(--border-strong) 58%, transparent 58%,
+                    transparent 72%, var(--border-strong) 72%, var(--border-strong) 80%, transparent 80%);
+}
+
 /* ステータスバー */
 .statusbar {
   height: 24px;
@@ -1696,6 +1764,7 @@ body.tetris-playing .color-history,
 body.tetris-playing .shape-menu,
 body.tetris-playing .ref-toggle,
 body.tetris-playing .ref-window,
+body.tetris-playing .float-palette,
 body.tetris-playing .statusbar,
 body.tetris-playing .ruler,
 body.tetris-playing .ruler-corner {
@@ -1730,6 +1799,7 @@ body.tetris-out .color-history,
 body.tetris-out .shape-menu,
 body.tetris-out .ref-toggle,
 body.tetris-out .ref-window,
+body.tetris-out .float-palette,
 body.tetris-out .ruler,
 body.tetris-out .ruler-corner,
 body.tetris-out .line-highlight,
@@ -1745,6 +1815,7 @@ body.tetris-return .color-history,
 body.tetris-return .shape-menu,
 body.tetris-return .ref-toggle,
 body.tetris-return .ref-window,
+body.tetris-return .float-palette,
 body.tetris-return .ruler,
 body.tetris-return .ruler-corner,
 body.tetris-return .line-highlight,

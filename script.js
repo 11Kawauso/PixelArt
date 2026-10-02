@@ -5023,10 +5023,160 @@ window.addEventListener('resize', () => {
   if (refWindow.style.display !== 'none') layoutRefWindow();
 });
 
+// ── パレットの切り出し ──
+// 「カラー」「カスタムカラー」の見出しの右のボタンを押すと、中身（.popout-body）を画面上の小窓に移す。
+// 小窓は見出しをつかんで動かし、右下のつまみで幅を変えられる。もう一度ボタンを押すか、小窓の ✕ でパネルに戻る。
+// 位置・幅・切り出しているかどうかは、次に開いたときのために覚えておく。
+const FLOAT_PALETTE_KEY = 'pixelart-float-palettes';
+const FLOAT_PALETTE_MIN_W = 160;
+let floatPaletteState = {}; // key → {open, x, y, w}
+try {
+  floatPaletteState = JSON.parse(localStorage.getItem(FLOAT_PALETTE_KEY)) || {};
+} catch (err) { /* 読めなければ何も覚えていない状態から始める */ }
+function saveFloatPalettes() {
+  try { localStorage.setItem(FLOAT_PALETTE_KEY, JSON.stringify(floatPaletteState)); } catch (err) { /* 記憶できなくても動作に支障はない */ }
+}
+
+const floatPalettes = {}; // key → {section, body, btn, win, winBody}
+
+// パレットから開くモーダルは、左パネルの中にあると切り出した小窓より奥に出てしまうため、パネルの外へ出しておく
+['palette-export-modal', 'color-pick-modal', 'confirm-delete-all'].forEach(id => {
+  document.body.appendChild(document.getElementById(id));
+});
+
+function layoutFloatPalette(fp) {
+  const g = floatPaletteState[fp.key];
+  g.w = Math.round(Math.max(FLOAT_PALETTE_MIN_W, Math.min(window.innerWidth - 16, g.w)));
+  fp.win.style.width = g.w + 'px';
+  const h = fp.win.offsetHeight;
+  g.x = Math.round(Math.max(0, Math.min(window.innerWidth - g.w, g.x)));
+  g.y = Math.round(Math.max(0, Math.min(window.innerHeight - h, g.y)));
+  fp.win.style.left = g.x + 'px';
+  fp.win.style.top = g.y + 'px';
+}
+
+// 最後に触った小窓をもう一方より手前に出す
+function bringFloatPaletteToFront(fp) {
+  Object.values(floatPalettes).forEach(o => o.win.classList.toggle('front', o === fp));
+}
+
+function setPalettePoppedOut(key, out) {
+  const fp = floatPalettes[key];
+  if (out) {
+    if (!floatPaletteState[key] || floatPaletteState[key].w == null) {
+      // 初めて切り出すときは、パネルのすぐ右、パネルにあったのと同じ高さに置く
+      const r = fp.section.getBoundingClientRect();
+      const panelRight = document.getElementById('panel').getBoundingClientRect().right;
+      floatPaletteState[key] = { x: Math.max(panelRight, 0) + 12, y: r.top, w: Math.max(r.width - 8, FLOAT_PALETTE_MIN_W) };
+    }
+    fp.winBody.appendChild(fp.body);
+    fp.win.style.display = 'flex';
+    layoutFloatPalette(fp);
+    bringFloatPaletteToFront(fp);
+  } else {
+    fp.section.appendChild(fp.body);
+    fp.win.style.display = 'none';
+  }
+  floatPaletteState[key].open = out;
+  fp.section.classList.toggle('popped-out', out);
+  fp.btn.classList.toggle('active', out);
+  fp.btn.title = out ? 'パネルに戻す' : 'パネルから切り出して、画面の好きな場所に置く';
+  saveFloatPalettes();
+}
+
+document.querySelectorAll('.panel-section[data-popout]').forEach(section => {
+  const key = section.dataset.popout;
+  const win = document.createElement('div');
+  win.className = 'float-palette';
+  win.style.display = 'none';
+  win.innerHTML = `
+    <div class="ref-header">
+      <span class="ref-title"></span>
+      <button class="ref-header-btn" title="パネルに戻す">✕</button>
+    </div>
+    <div class="float-palette-body"></div>
+    <div class="float-palette-resize" title="ドラッグで幅を変更"></div>`;
+  win.querySelector('.ref-title').textContent = section.dataset.popoutTitle;
+  document.body.appendChild(win);
+  const fp = {
+    key, section, win,
+    body: section.querySelector('.popout-body'),
+    btn: section.querySelector('.popout-btn'),
+    winBody: win.querySelector('.float-palette-body'),
+  };
+  floatPalettes[key] = fp;
+
+  fp.btn.addEventListener('click', () => setPalettePoppedOut(key, !section.classList.contains('popped-out')));
+  win.querySelector('.ref-header-btn').addEventListener('click', () => setPalettePoppedOut(key, false));
+  win.addEventListener('pointerdown', () => bringFloatPaletteToFront(fp));
+
+  // 見出しをつかんで動かす
+  const header = win.querySelector('.ref-header');
+  header.addEventListener('pointerdown', e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    const g = floatPaletteState[key];
+    const start = { px: e.clientX, py: e.clientY, x: g.x, y: g.y };
+    header.setPointerCapture(e.pointerId);
+    const onMove = ev => {
+      g.x = start.x + ev.clientX - start.px;
+      g.y = start.y + ev.clientY - start.py;
+      layoutFloatPalette(fp);
+    };
+    const onUp = () => {
+      header.removeEventListener('pointermove', onMove);
+      header.removeEventListener('pointerup', onUp);
+      header.removeEventListener('pointercancel', onUp);
+      saveFloatPalettes();
+    };
+    header.addEventListener('pointermove', onMove);
+    header.addEventListener('pointerup', onUp);
+    header.addEventListener('pointercancel', onUp);
+  });
+
+  // 右下のつまみで幅を変える（色の四角は幅に合わせて大きくなる）
+  const grip = win.querySelector('.float-palette-resize');
+  grip.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const g = floatPaletteState[key];
+    const start = { px: e.clientX, w: g.w };
+    grip.setPointerCapture(e.pointerId);
+    const onMove = ev => {
+      g.w = Math.min(start.w + ev.clientX - start.px, window.innerWidth - g.x);
+      layoutFloatPalette(fp);
+    };
+    const onUp = () => {
+      grip.removeEventListener('pointermove', onMove);
+      grip.removeEventListener('pointerup', onUp);
+      grip.removeEventListener('pointercancel', onUp);
+      saveFloatPalettes();
+    };
+    grip.addEventListener('pointermove', onMove);
+    grip.addEventListener('pointerup', onUp);
+    grip.addEventListener('pointercancel', onUp);
+  });
+});
+
+// 前回切り出していたパレットは、また切り出した状態で始める（タブレットは色パネルがあるので切り出さない）
+function restoreFloatPalettes() {
+  if (tabletUI) return;
+  for (const key in floatPalettes) {
+    if (floatPaletteState[key] && floatPaletteState[key].open) setPalettePoppedOut(key, true);
+  }
+}
+
+window.addEventListener('resize', () => {
+  Object.values(floatPalettes).forEach(fp => {
+    if (fp.win.style.display !== 'none') layoutFloatPalette(fp);
+  });
+});
+
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();
 buildCustomPalette();
 buildConvertPalette();
+restoreFloatPalettes();
 setColor('#3a3a38');
 setupRestoreButton();
 initCells(cols, rows, false);
