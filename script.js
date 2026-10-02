@@ -863,6 +863,9 @@ cOv.addEventListener('mousedown', e => {
 });
 cOv.addEventListener('mousemove', e => {
   if (!started) return;
+  // タップの直後にブラウザが真似して送ってくるマウス操作では、ガイドの枠を出さない
+  // （出すとタップした所に枠が残り、その後 Pencil を動かしても付いてこない）
+  if (performance.now() - lastTouchAt < 800) return;
   const {col, row} = getCell(e);
   if (selectionMode === 'range' && rangeStart) {
     if (rangeSelectMode === 'free') {
@@ -1126,12 +1129,21 @@ function touchPointerDown(col, row) {
     shapeStart = {col, row};
     return;
   }
+  showTouchGuide(col, row);
   if (activeLayerLocked() && currentTool !== 'pick') return;
   pushHistory();
   isPainting = true;
   lastCell = {col, row};
   applyToolSingle(col, row);
   drawCells();
+}
+
+// タッチ（Pencil・指）にはマウスのようにカーソルだけ動かす操作が無いので、
+// 触れている間はガイドの枠を触れている所に合わせて動かし、離したら消す
+function showTouchGuide(col, row) {
+  drawOverlayCell(col, row);
+  statPos.textContent = `${col+1}, ${row+1}`;
+  statColor.textContent = compositeAt(row, col) || '—';
 }
 
 function touchPointerMove(col, row) {
@@ -1164,6 +1176,7 @@ function touchPointerMove(col, row) {
     }
     return;
   }
+  showTouchGuide(col, row);
   if (!isPainting) return;
   if (lastCell && lastCell.col === col && lastCell.row === row) return;
   applyToolLine(lastCell.col, lastCell.row, col, row);
@@ -1206,6 +1219,8 @@ function touchPointerUp(col, row) {
   }
   if (isPainting) updateLayerThumbnails();
   isPainting = false; lastCell = null;
+  redrawOverlay(); // 離したらガイドの枠を消す
+  statPos.textContent = '—';
 }
 
 // ピンチのつもりで2本の指を置くと、ほんの少し早く触れた1本目で描き始めてしまう。
