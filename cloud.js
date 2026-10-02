@@ -6,7 +6,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-auth.js';
 import {
-  getFirestore, collection, doc, addDoc, setDoc, getDocs, deleteDoc,
+  getFirestore, collection, doc, setDoc, getDoc, getDocs, writeBatch, increment,
   serverTimestamp, query, orderBy,
 } from 'https://www.gstatic.com/firebasejs/12.16.0/firebase-firestore.js';
 
@@ -22,6 +22,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// クラウドに保存できる作品の数（1人あたり）。運営者のアカウントは制限なし。
+// 実際の制限は firestore.rules が行う（こちらは事前の案内と表示用）。数を変えるときは両方そろえること
+const MAX_ARTWORKS = 10;
+const OWNER_UID = 'B3n2pallCKcjkY3cyJoQg8At3tT2';
+const isOwner = user => !!user && user.uid === OWNER_UID;
 
 // 現在開いているクラウド作品（上書き保存の対象）
 let currentArtworkId = null;
@@ -59,15 +65,27 @@ function showToast(msg, isError) {
   toastEl.classList.toggle('error', !!isError);
   toastEl.style.display = 'block';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
+  // エラーは案内が長めなので、読み切れるよう少し長く出す
+  toastTimer = setTimeout(() => { toastEl.style.display = 'none'; }, isError ? 6000 : 3000);
 }
 
-// クラウド保存の失敗メッセージ。クラウド保存は運営者のアカウントだけが使える設定（firestore.rules）なので、それ以外の人には自分のフォルダに保存する方法を案内する
+// クラウド保存の失敗メッセージ。firestore.rules の制限（保存数・大きさ）で断られたときは、
+// 制限のない「作品ファイルとして保存」を案内する
 function cloudErrorText(prefix, err) {
   if (err && err.code === 'permission-denied') {
-    return 'クラウド保存は運営者専用です。「保存 ▸ 作品ファイルとして保存」をお使いください';
+    return `クラウドに保存できませんでした（${MAX_ARTWORKS}個までで、大きすぎる作品も保存できません）。`
+      + '「保存 ▸ 作品ファイルとして保存」なら制限なく保存できます';
   }
   return prefix + (err.code || err.message);
+}
+
+// 保存数の記録（users/{uid}）。作品の新規保存・削除と同じバッチで1ずつ増減させる
+function counterRef(uid) {
+  return doc(db, 'users', uid);
+}
+async function savedCount(uid) {
+  const snap = await getDoc(counterRef(uid));
+  return snap.exists() ? (snap.data().count || 0) : 0;
 }
 
 // script.jsの「新規キャンバス」から呼ばれる。開いている作品の紐付けを解除する。
@@ -162,20 +180,38 @@ async function saveArtwork(name, artworkId) {
     updatedAt: serverTimestamp(),
   };
   if (artworkId) {
+    // 上書き保存は数が変わらないので、そのまま書き込む
     await setDoc(doc(db, 'users', user.uid, 'artworks', artworkId), payload, { merge: true });
     window.markProjectSaved();
     return artworkId;
   }
+  // 新規保存は、作品と保存数（+1）を同じバッチで書き込む（ルールが両方そろっているかを確かめる）
   payload.createdAt = serverTimestamp();
-  const ref = await addDoc(artworksCol(user.uid), payload);
+  const ref = doc(artworksCol(user.uid));
+  const batch = writeBatch(db);
+  batch.set(ref, payload);
+  batch.set(counterRef(user.uid), { count: increment(1), lastId: ref.id }, { merge: true });
+  await batch.commit();
   window.markProjectSaved();
   return ref.id;
 }
 
+// 新規保存の前に、上限に達していないかを確かめる（達していたら案内を出して false）
+async function canSaveNew(user) {
+  if (isOwner(user)) return true;
+  if (await savedCount(user.uid) < MAX_ARTWORKS) return true;
+  showToast(`クラウドに保存できるのは${MAX_ARTWORKS}個までです。ギャラリーで不要な作品を削除するか、`
+    + '上書き保存・「作品ファイルとして保存」をお使いください', true);
+  return false;
+}
+
 // 新規保存: 常に名前を付けて新しい作品として保存し、以後の上書き対象にする
-btnSaveNew.addEventListener('click', () => {
+btnSaveNew.addEventListener('click', async () => {
   window.closeFileMenu();
   if (!auth.currentUser || !window.isEditorStarted()) return;
+  try {
+    if (!await canSaveNew(auth.currentUser)) return;
+  } catch (err) { /* 数を確かめられなくても、保存時にルールが判定する */ }
   saveNameInput.value = '';
   saveNameModal.style.display = 'flex';
   saveNameInput.focus();
@@ -218,8 +254,19 @@ btnSaveOver.addEventListener('click', () => {
 
 // ── ギャラリー ──
 // mode: 'browse' = 開く/削除、'overwrite' = 上書き先の選択
+let snapCount = null; // ギャラリーに出している作品の数（読み込むまではnull）
+
+// タイトルに今の保存数を添える（例：マイギャラリー（3 / 10））。運営者は上限なしなので数だけ
+function updateGalleryTitle(mode) {
+  const base = mode === 'overwrite' ? '上書き保存する作品を選択' : 'マイギャラリー';
+  if (snapCount === null) { galleryTitle.textContent = base; return; }
+  const limit = isOwner(auth.currentUser) ? '' : ` / ${MAX_ARTWORKS}`;
+  galleryTitle.textContent = `${base}（${snapCount}${limit}）`;
+}
+
 function openGallery(mode) {
-  galleryTitle.textContent = mode === 'overwrite' ? '上書き保存する作品を選択' : 'マイギャラリー';
+  snapCount = null;
+  updateGalleryTitle(mode);
   galleryModal.style.display = 'flex';
   renderGallery(mode);
 }
@@ -237,6 +284,8 @@ async function renderGallery(mode) {
     return;
   }
   galleryList.innerHTML = '';
+  snapCount = snap.size;
+  updateGalleryTitle(mode);
   if (snap.empty) {
     galleryList.innerHTML = '<div class="gallery-empty">保存された作品はまだありません</div>';
     return;
@@ -316,7 +365,14 @@ async function renderGallery(mode) {
           return;
         }
         try {
-          await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'artworks', d.id));
+          // 作品の削除と保存数（-1）を同じバッチで書き込む
+          const uid = auth.currentUser.uid;
+          const batch = writeBatch(db);
+          batch.delete(doc(db, 'users', uid, 'artworks', d.id));
+          batch.set(counterRef(uid), { count: increment(-1), lastId: d.id }, { merge: true });
+          await batch.commit();
+          snapCount--;
+          updateGalleryTitle(mode);
           if (currentArtworkId === d.id) setCurrentArtwork(null, '');
           item.remove();
           if (!galleryList.children.length) {

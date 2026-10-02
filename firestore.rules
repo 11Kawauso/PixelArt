@@ -1,17 +1,87 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // クラウド保存は運営者（11Kawauso）のアカウントだけが使える。
-    // 誰でもログインできるため、運営者以外に保存を許すと、大量保存で無料枠を
-    // 使い切られたり、無関係なデータの置き場所にされたりするおそれがある。
-    // 運営者以外は「作品ファイルとして保存」で自分のフォルダに保存してもらう。
+    // クラウド保存は、Googleアカウントでログインした人なら誰でも使える。
+    // ただし無料枠を使い切られたり、無関係なデータの置き場所にされたりしないよう、
+    //   ・1人あたり MAX_ARTWORKS 個まで
+    //   ・保存できる項目と、1作品の大きさに上限
+    // を設ける。運営者（11Kawauso）のアカウントは制限なし。
     //
-    // 下のUIDは運営者のアカウントのもの（Firebaseコンソールの
-    // Authentication → ユーザー の「ユーザー UID」列で確認できる）
-    match /users/{uid}/artworks/{artworkId} {
-      allow read, write: if request.auth != null
-        && request.auth.uid == uid
-        && uid == 'B3n2pallCKcjkY3cyJoQg8At3tT2';
+    // 保存数は users/{uid} の count に記録し、作品の新規保存・削除と同じ書き込み（バッチ）で
+    // 1ずつ増減させる。lastId にはそのとき保存・削除した作品のIDを入れ、
+    // 「数だけ減らして上限をすり抜ける」ような書き換えができないようにする。
+
+    // 運営者のUID（Firebaseコンソールの Authentication → ユーザー の「ユーザー UID」列で確認できる）
+    function isOwnerAccount(uid) {
+      return uid == 'B3n2pallCKcjkY3cyJoQg8At3tT2';
+    }
+    // cloud.js の MAX_ARTWORKS と合わせること
+    function maxArtworks() {
+      return 10;
+    }
+    function signedIn(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+    function counterPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+    function artworkPath(uid, id) {
+      return /databases/$(database)/documents/users/$(uid)/artworks/$(id);
+    }
+    function countBefore(uid) {
+      return exists(counterPath(uid)) ? get(counterPath(uid)).data.count : 0;
+    }
+
+    // 保存できる作品の中身（項目と大きさ）。ドキュメント全体の上限は約1MBなので、その内側に収める
+    function validArtwork(isCreate) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'project', 'thumb', 'createdAt', 'updatedAt'])
+        && d.name is string && d.name.size() <= 30
+        && d.project is string && d.project.size() <= 700000
+        && d.thumb is string && d.thumb.size() <= 250000
+        && d.updatedAt == request.time
+        && (!isCreate || d.createdAt == request.time);
+    }
+
+    match /users/{uid} {
+      // 運営者は制限なし
+      allow read, write: if signedIn(uid) && isOwnerAccount(uid);
+
+      // 保存数：作品の新規保存（+1）・削除（-1）と同時にしか変えられない
+      allow read: if signedIn(uid);
+      allow create, update: if signedIn(uid)
+        && request.resource.data.keys().hasOnly(['count', 'lastId'])
+        && request.resource.data.count is int
+        && request.resource.data.lastId is string
+        && (
+          (request.resource.data.count == countBefore(uid) + 1
+            && request.resource.data.count <= maxArtworks()
+            && !exists(artworkPath(uid, request.resource.data.lastId))
+            && existsAfter(artworkPath(uid, request.resource.data.lastId)))
+          ||
+          (request.resource.data.count == countBefore(uid) - 1
+            && exists(artworkPath(uid, request.resource.data.lastId))
+            && !existsAfter(artworkPath(uid, request.resource.data.lastId)))
+        );
+
+      match /artworks/{artworkId} {
+        // 運営者は制限なし
+        allow read, write: if signedIn(uid) && isOwnerAccount(uid);
+
+        allow read: if signedIn(uid);
+        // 新規保存：保存数を1増やす書き込みと一緒のときだけ（上限は保存数の側で確かめる）
+        allow create: if signedIn(uid)
+          && validArtwork(true)
+          && getAfter(counterPath(uid)).data.count == countBefore(uid) + 1
+          && getAfter(counterPath(uid)).data.lastId == artworkId;
+        // 上書き保存：数は変わらないので、中身だけ確かめる
+        allow update: if signedIn(uid)
+          && validArtwork(false);
+        // 削除：保存数を1減らす書き込みと一緒のときだけ
+        allow delete: if signedIn(uid)
+          && getAfter(counterPath(uid)).data.count == countBefore(uid) - 1
+          && getAfter(counterPath(uid)).data.lastId == artworkId;
+      }
     }
   }
 }
