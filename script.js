@@ -1926,9 +1926,13 @@ function updateColorDots() {
   });
 }
 
+// 履歴にすでにある色をまた使ったときは、増やさずに今の色の位置へ移すだけにする
+// （同じ色が何度も並ばないように）
 function pushColorHistory(hex) {
   if (colorHistoryList[0] === hex) return;
-  for (let i = COLOR_HISTORY_SIZE - 1; i > 0; i--) {
+  const found = colorHistoryList.findIndex(c => c && c.toLowerCase() === hex.toLowerCase());
+  const from = found > 0 ? found : COLOR_HISTORY_SIZE - 1;
+  for (let i = from; i > 0; i--) {
     colorHistoryList[i] = colorHistoryList[i - 1];
   }
   colorHistoryList[0] = hex;
