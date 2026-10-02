@@ -1293,12 +1293,16 @@ updateFingerDrawButton();
 // iPad の Safari では、Apple Pencil のタッチは touchType が 'stylus' になる
 const isStylus = t => t.touchType === 'stylus';
 let penTouchId = null; // 描いている最中の Pencil のタッチ
-// タッチの直後にブラウザが真似して送ってくるマウス操作で描かないよう、最後のタッチ時刻を覚える
+// タッチの直後にブラウザが真似して送ってくるマウス操作で描かないよう、最後のタッチ時刻を覚える。
+// 触れた時だけでなく、動かした時・離した時も覚える。iPad の Pencil では、長めに描いて離した後に
+// 最初に触れた所へのマウス操作が届くことがあり、触れた時から測ると間に合わずにガイドの枠がそこへ戻ってしまう。
 let lastTouchAt = -Infinity;
+['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(type => {
+  cOv.addEventListener(type, () => { lastTouchAt = performance.now(); }, { passive: true });
+});
 const findTouch = (list, id) => [...list].find(t => t.identifier === id);
 
 cOv.addEventListener('touchstart', e => {
-  lastTouchAt = performance.now();
   // 初めて Pencil で触れたら、指は移動・拡大縮小に使うよう切り替える（まだ選んでいない場合）
   if (tabletUI && fingerDrawSetting === null && [...e.changedTouches].some(isStylus)) {
     setFingerDraw(false);
@@ -5306,6 +5310,84 @@ window.addEventListener('resize', () => {
     if (fp.win.style.display !== 'none') layoutFloatPalette(fp);
   });
 });
+
+// ── 長押しでボタンの説明を出す（スマホ・タブレット） ──
+// パソコンではマウスを乗せると title の説明が出るが、タッチでは出ないため、
+// ボタンを長押ししたら title の内容を吹き出しで出す。長押しした後に離しても、押したことにはしない。
+// 押している間だけ働くボタン（👁 など）は data-no-tip で外す。
+const TIP_PRESS_MS = 500;
+const touchTip = document.createElement('div');
+touchTip.className = 'touch-tip';
+touchTip.style.display = 'none';
+document.body.appendChild(touchTip);
+let tipPress = null;      // 押している途中 {target, x, y, timer, shown}
+let tipHideTimer = null;
+let tipSuppressClick = null; // 長押しの後に来るクリックを止める {target, until}
+
+function hideTouchTip() {
+  clearTimeout(tipHideTimer);
+  touchTip.style.display = 'none';
+}
+
+function showTouchTip(target) {
+  const text = target.getAttribute('title');
+  if (!text) return false;
+  touchTip.textContent = text;
+  touchTip.style.display = 'block';
+  // ボタンの上に出す。上に場所が無ければ下に出し、左右は画面からはみ出さないようにする
+  const r = target.getBoundingClientRect();
+  const w = touchTip.offsetWidth, h = touchTip.offsetHeight;
+  const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+  let top = r.top - h - 8;
+  if (top < 8) top = r.bottom + 8;
+  touchTip.style.left = left + 'px';
+  touchTip.style.top = top + 'px';
+  return true;
+}
+
+document.addEventListener('pointerdown', e => {
+  hideTouchTip();
+  tipSuppressClick = null;
+  if (e.pointerType === 'mouse') return;
+  const target = e.target.closest('button[title], .color-dot[title]');
+  if (!target || target.closest('[data-no-tip]')) return;
+  const press = { target, x: e.clientX, y: e.clientY, shown: false };
+  press.timer = setTimeout(() => { press.shown = showTouchTip(target); }, TIP_PRESS_MS);
+  tipPress = press;
+}, true);
+
+document.addEventListener('pointermove', e => {
+  // 指がずれたら（スクロールなど）長押しではない
+  if (tipPress && !tipPress.shown && Math.hypot(e.clientX - tipPress.x, e.clientY - tipPress.y) > 10) {
+    clearTimeout(tipPress.timer);
+    tipPress = null;
+  }
+}, true);
+
+['pointerup', 'pointercancel'].forEach(type => {
+  document.addEventListener(type, () => {
+    if (!tipPress) return;
+    clearTimeout(tipPress.timer);
+    if (tipPress.shown) {
+      tipSuppressClick = { target: tipPress.target, until: performance.now() + 800 };
+      tipHideTimer = setTimeout(hideTouchTip, 2500); // 読めるよう、離した後もしばらく出しておく
+    }
+    tipPress = null;
+  }, true);
+});
+
+document.addEventListener('click', e => {
+  const s = tipSuppressClick;
+  if (!s || performance.now() > s.until || !s.target.contains(e.target)) return;
+  tipSuppressClick = null;
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
+
+// スマホの長押しメニューを出さない（説明を出している所だけ）
+document.addEventListener('contextmenu', e => {
+  if (tipPress || touchTip.style.display !== 'none') e.preventDefault();
+}, true);
 
 // ── 起動 ─────────────────────────────────────────────
 buildPalette();

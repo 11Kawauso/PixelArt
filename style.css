@@ -102,8 +102,27 @@ button {
   gap: 5px;
   white-space: nowrap;
   transition: background 0.1s;
+  /* 長押しで説明を出すので、iPhone・iPad の文字選択や長押しメニューは出さない */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 button:hover { background: var(--bg); }
+
+/* 長押しで出すボタンの説明（位置はscript.jsで決める） */
+.touch-tip {
+  position: fixed;
+  z-index: 1100;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  background: #2a2a28;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  pointer-events: none;
+}
 button:active { transform: scale(0.97); }
 button.primary {
   background: var(--accent);
