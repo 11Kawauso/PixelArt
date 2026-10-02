@@ -1226,6 +1226,7 @@ input, select, textarea {
   background: var(--surface);
   cursor: pointer;
   transition: background 0.1s, border-color 0.1s;
+  touch-action: manipulation; /* 名前のダブルタップで画面が拡大されないようにする */
 }
 .layer-item:hover { background: var(--bg); }
 .layer-item.active {

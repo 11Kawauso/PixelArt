@@ -1591,6 +1591,7 @@ const btnLayerLock = document.getElementById('btn-layer-lock');
 const layerOpacitySlider = document.getElementById('layer-opacity');
 const layerOpacityVal = document.getElementById('layer-opacity-val');
 let layerThumbCanvases = []; // layers と同じ並び（i=0が最下層）
+let lastLayerNameTap = null; // レイヤー名のダブルクリック判定用 {layer, time}
 
 function drawLayerThumb(canvas, layer) {
   canvas.width = cols;
@@ -1639,10 +1640,18 @@ function updateLayerPanel() {
     const name = document.createElement('span');
     name.className = 'layer-name';
     name.textContent = layer.name;
-    name.title = 'ダブルクリックで名前を変更';
-    name.addEventListener('dblclick', e => {
-      e.stopPropagation();
-      startRenameLayer(layer, name);
+    name.title = 'ダブルクリック（ダブルタップ）で名前を変更';
+    // ダブルクリックの判定は自前で行う。スマホ・iPad のブラウザはダブルタップで dblclick を送らないうえ、
+    // 1回目のタップでレイヤーが切り替わるとリストが作り直され、2回目は別の要素へのタップになるため。
+    name.addEventListener('click', e => {
+      const now = performance.now();
+      if (lastLayerNameTap && lastLayerNameTap.layer === layer && now - lastLayerNameTap.time < 500) {
+        e.stopPropagation();
+        lastLayerNameTap = null;
+        startRenameLayer(layer, name);
+        return;
+      }
+      lastLayerNameTap = { layer, time: now }; // 1回目はそのまま項目のクリック（レイヤーの切り替え）になる
     });
 
     item.appendChild(eye);
