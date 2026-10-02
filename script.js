@@ -2104,9 +2104,11 @@ colorHexInput.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeColorPicker();
 });
 
-// 画面上の好きな場所から色を拾う（パソコンのChrome・Edgeなど、対応しているブラウザだけ）
+// 💉：色を拾ってピッカーに入れる。
+// パソコンのChrome・Edgeなどは、ブラウザの機能で画面のどこからでも拾える。
+// それ以外（スマホ・iPad・Safari・Firefoxなど）は、このサイトの中から拾う（下の「サイト内のスポイト」）。
+btnColorEyedropper.style.display = '';
 if (window.EyeDropper) {
-  btnColorEyedropper.style.display = '';
   btnColorEyedropper.addEventListener('click', async () => {
     try {
       const { sRGBHex } = await new EyeDropper().open();
@@ -2114,7 +2116,112 @@ if (window.EyeDropper) {
       showPickedColor(sRGBHex.toLowerCase(), false);
     } catch (err) { /* Escキーなどで取り消した */ }
   });
+} else {
+  btnColorEyedropper.title = 'キャンバス・参考画像・パレットから色を拾う';
+  btnColorEyedropper.addEventListener('click', startPagePick);
 }
+
+// ── サイト内のスポイト ──
+// 色選択の画面をいったん隠し、タップ（クリック）した所の色をピッカーに入れて戻る。
+// 拾えるのはキャンバス・参考画像・パレットの色・色の履歴の丸。
+// 指で押したまま動かすと拡大鏡が付いてきて、離した所の色を取る。
+const pagePickBar = document.createElement('div');
+pagePickBar.className = 'page-pick-bar';
+pagePickBar.innerHTML = '<span>色を取りたい所をタップしてください</span><button>やめる</button>';
+pagePickBar.style.display = 'none';
+document.body.appendChild(pagePickBar);
+pagePickBar.querySelector('button').addEventListener('click', () => endPagePick(null));
+let pagePicking = false;
+let pagePickPressed = false;
+
+function cssColorToHex(css) {
+  const m = css.match(/rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)(?:\s*[,/]\s*([\d.]+%?))?/);
+  if (!m) return null;
+  if (m[4] !== undefined && parseFloat(m[4]) === 0) return null; // 透明
+  return '#' + [m[1], m[2], m[3]].map(v => (+v).toString(16).padStart(2, '0')).join('');
+}
+
+// 画面上の点の色。'#rrggbb'、透明な所ならnull、拾えない所ならundefined。
+function pageColorAt(x, y) {
+  // スマホでパネルを開いているときの暗い幕は無視して、その下を見る
+  const el = document.elementsFromPoint(x, y).find(e => !e.closest('.panel-backdrop, .page-pick-bar, .pick-loupe'));
+  if (!el) return undefined;
+  if (el === cOv) {
+    const { col, row } = getCell({ clientX: x, clientY: y });
+    if (col < 0 || row < 0 || col >= cols || row >= rows) return undefined;
+    return compositeAt(row, col);
+  }
+  if (refSampleCtx && refBody.contains(el)) return refColorAt(x, y) || undefined;
+  const sw = el.closest('.swatch, .color-dot');
+  if (sw) return cssColorToHex(getComputedStyle(sw).backgroundColor) || undefined;
+  return undefined;
+}
+
+function showPagePickLoupe(x, y) {
+  // キャンバスの上ではちょうど1マスずつ、それ以外は4pxずつずらした所を並べる
+  const step = document.elementFromPoint(x, y) === cOv ? cellPx() * zoom : 4;
+  showPickLoupe(x, y, (dx, dy) => pageColorAt(x + dx * step, y + dy * step));
+}
+
+function startPagePick() {
+  pagePicking = true;
+  pagePickPressed = false;
+  colorPickModal.style.display = 'none';
+  pagePickBar.style.display = 'flex';
+  document.body.classList.add('page-picking');
+}
+
+function endPagePick(hex) {
+  pagePicking = false;
+  pagePickPressed = false;
+  pagePickBar.style.display = 'none';
+  document.body.classList.remove('page-picking');
+  hidePickLoupe();
+  colorPickModal.style.display = 'flex';
+  if (hex) {
+    colorWheel.setHex(hex);
+    showPickedColor(hex, false);
+  }
+}
+
+// 拾っている間は、ほかの操作（描く・パネルを閉じるなど）に届かないよう、ページ全体で先に受け取って止める
+const isPagePickBarEvent = e => pagePickBar.contains(e.target);
+function blockForPagePick(e) {
+  if (!pagePicking || isPagePickBarEvent(e)) return;
+  e.preventDefault();
+  e.stopPropagation();
+}
+['touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu'].forEach(type => {
+  window.addEventListener(type, blockForPagePick, { capture: true, passive: false });
+});
+window.addEventListener('pointerdown', e => {
+  if (!pagePicking || isPagePickBarEvent(e)) return;
+  blockForPagePick(e);
+  pagePickPressed = true;
+  showPagePickLoupe(e.clientX, e.clientY);
+}, { capture: true });
+window.addEventListener('pointermove', e => {
+  if (!pagePicking) return;
+  blockForPagePick(e);
+  if (pagePickPressed || e.pointerType === 'mouse') showPagePickLoupe(e.clientX, e.clientY);
+}, { capture: true });
+window.addEventListener('pointerup', e => {
+  if (!pagePicking || !pagePickPressed) return;
+  blockForPagePick(e);
+  pagePickPressed = false;
+  const hex = pageColorAt(e.clientX, e.clientY);
+  // この後に続くマウスのclickまで止めてから戻す（先に戻すと、clickが下のパレットなどに届いてしまう）
+  if (hex) setTimeout(() => endPagePick(hex), 0);
+  else hidePickLoupe(); // 色の無い所で離したら、そのまま次のタップを待つ
+}, { capture: true });
+window.addEventListener('pointercancel', () => {
+  if (!pagePicking) return;
+  pagePickPressed = false;
+  hidePickLoupe();
+}, { capture: true });
+window.addEventListener('keydown', e => {
+  if (pagePicking && e.key === 'Escape') { e.stopPropagation(); endPagePick(null); }
+}, { capture: true });
 
 document.getElementById('btn-open-color-wheel').addEventListener('click', () => {
   openColorPicker('current', -1, currentColor);
