@@ -770,6 +770,15 @@ input, select, textarea {
 #canvas-trace { z-index: 0; pointer-events: none; }
 #canvas-main { z-index: 1; pointer-events: none; }
 #canvas-overlay { z-index: 2; cursor: crosshair; }
+/* スポイト中にカーソルの横に出る拡大鏡（位置はscript.jsで決める） */
+.pick-loupe {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  display: none;
+  pointer-events: none;
+}
 /* 「レイヤーの上」に切り替えたとき。canvas-main(1)より上、
    canvas-overlay(2)とは同点だがDOM順で後のoverlayが上に来るため、
    カーソルのプレビュー表示はトレース画像に隠されない。 */

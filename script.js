@@ -957,6 +957,118 @@ cOv.addEventListener('mouseleave',() => {
   // これを消さないと、反対側から再進入したときに出た地点と
   // 入った地点が直線補間でつながって描画されてしまう。
   lastCell = null;
+  hidePickLoupe();
+});
+
+// ── スポイトの拡大鏡 ──
+// スポイト中は、カーソルの横にカーソルのまわりを拡大した円を出す。
+// 真ん中の枠がクリックで取れる色。カーソル自体は隠さないので、どこを指しているか分かりやすい。
+const LOUPE_CELLS = 9;     // 縦横に見せるマスの数（真ん中があるよう奇数）
+const LOUPE_CELL_PX = 12;  // 拡大鏡の中の1マスの大きさ
+const LOUPE_GAP = 22;      // カーソルから離す距離
+const LOUPE_D = LOUPE_CELLS * LOUPE_CELL_PX;
+const LOUPE_W = LOUPE_D + 8, LOUPE_H = LOUPE_D + 8 + 30; // 円の下に色コードの札を付ける
+const pickLoupe = document.createElement('canvas');
+pickLoupe.className = 'pick-loupe';
+document.body.appendChild(pickLoupe);
+let loupeDpr = 0;
+
+// colorAt(dx, dy)：真ん中から dx, dy ずれた所の色。'#rrggbb'、透明ならnull、範囲外ならundefined。
+function showPickLoupe(clientX, clientY, colorAt) {
+  const dpr = window.devicePixelRatio || 1;
+  if (dpr !== loupeDpr) {
+    loupeDpr = dpr;
+    pickLoupe.width = LOUPE_W * dpr;
+    pickLoupe.height = LOUPE_H * dpr;
+    pickLoupe.style.width = LOUPE_W + 'px';
+    pickLoupe.style.height = LOUPE_H + 'px';
+  }
+  const ctx = pickLoupe.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, LOUPE_W, LOUPE_H);
+  const cx = LOUPE_W / 2, cy = LOUPE_D / 2 + 4, r = LOUPE_D / 2;
+  const x0 = cx - r, y0 = cy - r, S = LOUPE_CELL_PX, h = (LOUPE_CELLS - 1) / 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.clip();
+  for (let i = 0; i < LOUPE_CELLS; i++) {
+    for (let j = 0; j < LOUPE_CELLS; j++) {
+      const x = x0 + j * S, y = y0 + i * S;
+      const c = colorAt(j - h, i - h);
+      if (c === undefined) {
+        ctx.fillStyle = '#888888';
+        ctx.fillRect(x, y, S, S);
+      } else if (c === null) {
+        // 透明な所は市松模様
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x, y, S, S);
+        ctx.fillStyle = '#d8d8d8';
+        ctx.fillRect(x, y, S / 2, S / 2);
+        ctx.fillRect(x + S / 2, y + S / 2, S / 2, S / 2);
+      } else {
+        ctx.fillStyle = c;
+        ctx.fillRect(x, y, S, S);
+      }
+    }
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let i = 0; i <= LOUPE_CELLS; i++) {
+    ctx.moveTo(x0 + i * S, y0); ctx.lineTo(x0 + i * S, y0 + LOUPE_D);
+    ctx.moveTo(x0, y0 + i * S); ctx.lineTo(x0 + LOUPE_D, y0 + i * S);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // 真ん中のマス（取れる色）は白黒の二重枠で、どんな色の上でも見えるようにする
+  const mx = x0 + h * S, my = y0 + h * S;
+  ctx.lineWidth = 3; ctx.strokeStyle = '#000000'; ctx.strokeRect(mx, my, S, S);
+  ctx.lineWidth = 1.5; ctx.strokeStyle = '#ffffff'; ctx.strokeRect(mx, my, S, S);
+  ctx.lineWidth = 3; ctx.strokeStyle = '#ffffff';
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+  ctx.lineWidth = 1; ctx.strokeStyle = '#444444';
+  ctx.beginPath(); ctx.arc(cx, cy, r + 1.5, 0, Math.PI * 2); ctx.stroke();
+
+  // 色コードの札
+  const center = colorAt(0, 0);
+  const tw = 84, th = 22, tx = cx - tw / 2, ty = LOUPE_D + 12;
+  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#444444'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.roundRect(tx + 0.5, ty + 0.5, tw - 1, th - 1, 6); ctx.fill(); ctx.stroke();
+  if (center) {
+    ctx.fillStyle = center;
+    ctx.fillRect(tx + 6, ty + 5, 12, 12);
+    ctx.strokeRect(tx + 6.5, ty + 5.5, 11, 11);
+  }
+  ctx.fillStyle = '#222222';
+  ctx.font = '12px monospace';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(center || '—', tx + 24, ty + th / 2 + 1);
+
+  // 基本はカーソルの右上。画面からはみ出すときは反対側に回す
+  let left = clientX + LOUPE_GAP, top = clientY - LOUPE_GAP - LOUPE_H;
+  if (left + LOUPE_W > window.innerWidth) left = clientX - LOUPE_GAP - LOUPE_W;
+  if (top < 0) top = clientY + LOUPE_GAP;
+  pickLoupe.style.transform = `translate(${left}px, ${top}px)`;
+  pickLoupe.style.display = 'block';
+}
+
+function hidePickLoupe() {
+  pickLoupe.style.display = 'none';
+}
+
+// キャンバス上のスポイト：合成後の色を見せる
+cOv.addEventListener('mousemove', e => {
+  if (!started || currentTool !== 'pick' || selectionMode !== 'none') { hidePickLoupe(); return; }
+  if (performance.now() - lastTouchAt < 800) return; // タッチの真似のマウス操作では出さない
+  const { col, row } = getCell(e);
+  showPickLoupe(e.clientX, e.clientY, (dx, dy) => {
+    const r = row + dy, c = col + dx;
+    if (r < 0 || c < 0 || r >= rows || c >= cols) return undefined;
+    return compositeAt(r, c);
+  });
 });
 
 // タッチ対応（1本指：描画・選択・図形／2本指：ピンチズーム＋パン）
@@ -2810,6 +2922,7 @@ function setTool(t) {
   updateShapeMenuUI();
   updateCanvasCursor();
   updateHeaderStatus();
+  if (t !== 'pick') hidePickLoupe();
 }
 
 // ── ヘッダーの状態表示（描画中のレイヤーと今のツール） ──
@@ -4727,9 +4840,28 @@ function isRefPicking(e) {
 refBody.addEventListener('pointermove', e => {
   if (currentTool !== 'pick') return;
   statColor.textContent = refColorAt(e.clientX, e.clientY) || '—';
+  if (!refSampleCtx || e.pointerType !== 'mouse') return;
+  // 拡大鏡には画像の原寸のピクセルを並べる
+  const { width: nw, height: nh } = refSampleCtx.canvas;
+  const p = refBodyPoint(e.clientX, e.clientY);
+  const x = Math.floor((p.x - refView.ox) / refView.scale);
+  const y = Math.floor((p.y - refView.oy) / refView.scale);
+  if (x < 0 || y < 0 || x >= nw || y >= nh) { hidePickLoupe(); return; }
+  const h = (LOUPE_CELLS - 1) / 2;
+  const sx = Math.max(0, x - h), sy = Math.max(0, y - h);
+  const sw = Math.min(nw, x + h + 1) - sx, sh = Math.min(nh, y + h + 1) - sy;
+  const data = refSampleCtx.getImageData(sx, sy, sw, sh).data;
+  showPickLoupe(e.clientX, e.clientY, (dx, dy) => {
+    const ix = x + dx - sx, iy = y + dy - sy;
+    if (ix < 0 || iy < 0 || ix >= sw || iy >= sh) return undefined;
+    const k = (iy * sw + ix) * 4;
+    if (data[k + 3] < 128) return null;
+    return '#' + [data[k], data[k + 1], data[k + 2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  });
 });
 refBody.addEventListener('pointerleave', () => {
   if (currentTool === 'pick') statColor.textContent = '—';
+  hidePickLoupe();
 });
 
 btnRefToggle.addEventListener('click', () => {
