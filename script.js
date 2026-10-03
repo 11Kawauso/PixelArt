@@ -826,7 +826,7 @@ cOv.addEventListener('mousedown', e => {
   if (!started || e.button !== 0) return;
   // タブレットで指でタップすると、ブラウザがマウス操作を真似して送ってくるため、それでは描かない
   // （Pencilで描くモードでは指のタップを止めずにスクロールへ回しているので、ここで弾く）
-  if (performance.now() - lastTouchAt < 800) return;
+  if (isEmulatedMouse()) return;
   const {col, row} = getCell(e);
   if (selectionMode === 'range') {
     rangeStart = {col, row};
@@ -865,7 +865,7 @@ cOv.addEventListener('mousemove', e => {
   if (!started) return;
   // タップの直後にブラウザが真似して送ってくるマウス操作では、ガイドの枠を出さない
   // （出すとタップした所に枠が残り、その後 Pencil を動かしても付いてこない）
-  if (performance.now() - lastTouchAt < 800) return;
+  if (isEmulatedMouse()) return;
   const {col, row} = getCell(e);
   if (selectionMode === 'range' && rangeStart) {
     if (rangeSelectMode === 'free') {
@@ -1074,7 +1074,7 @@ function hidePickLoupe() {
 // キャンバス上のスポイト：合成後の色を見せる
 cOv.addEventListener('mousemove', e => {
   if (!started || currentTool !== 'pick' || selectionMode !== 'none') { hidePickLoupe(); return; }
-  if (performance.now() - lastTouchAt < 800) return; // タッチの真似のマウス操作では出さない
+  if (isEmulatedMouse()) return; // タッチの真似のマウス操作では出さない
   const { col, row } = getCell(e);
   showPickLoupe(e.clientX, e.clientY, (dx, dy) => {
     const r = row + dy, c = col + dx;
@@ -1347,6 +1347,16 @@ let lastTouchAt = -Infinity;
 ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(type => {
   cOv.addEventListener(type, () => { lastTouchAt = performance.now(); }, { passive: true });
 });
+// 直前のポインタの種類（'mouse' / 'touch'（指）/ 'pen'（Pencil））。ブラウザは、指や Pencil の操作の後に
+// マウス操作を真似して送ってくることがあり、iPad ではその時刻も位置（最初に触れた所など）も当てにならない。
+// ポインタのイベントは真似のマウス操作より必ず先に届くので、直前がマウスでなければ真似とみなして無視する。
+let lastPointerType = 'mouse';
+['pointerdown', 'pointermove', 'pointerup'].forEach(type => {
+  window.addEventListener(type, e => { lastPointerType = e.pointerType; }, true);
+});
+function isEmulatedMouse() {
+  return lastPointerType !== 'mouse' || performance.now() - lastTouchAt < 800;
+}
 const findTouch = (list, id) => [...list].find(t => t.identifier === id);
 
 cOv.addEventListener('touchstart', e => {
