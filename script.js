@@ -965,7 +965,7 @@ cOv.addEventListener('mouseleave',() => {
 // iPad で Pencil を浮かせて動かしたときもガイドの枠が出るが、Pencil を画面から遠ざけたときは
 // マウスの「外に出た」が来ないことがあるため、Pencil 自体の「外に出た」でも消す
 cOv.addEventListener('pointerleave', e => {
-  if (e.pointerType === 'mouse' || isPainting || touchPicking) return;
+  if (e.pointerType === 'mouse' || isPainting || touchPick) return;
   redrawOverlay();
   statPos.textContent = '—';
   hidePickLoupe();
@@ -1138,13 +1138,7 @@ function touchPointerDown(col, row) {
     shapeStart = {col, row};
     return;
   }
-  if (currentTool === 'pick') {
-    // スポイトは触れた瞬間には取らず、触れている間はガイドの枠と拡大鏡を付いてこさせ、
-    // 離した所の色を取る（指やペン先で隠れて狙えないため）
-    touchPicking = true;
-    showTouchPick(col, row);
-    return;
-  }
+  if (currentTool === 'pick') return; // タッチのスポイトは下の「タッチのスポイト」で扱う
   showTouchGuide(col, row);
   if (activeLayerLocked()) return;
   pushHistory();
@@ -1162,32 +1156,59 @@ function showTouchGuide(col, row) {
   statColor.textContent = compositeAt(row, col) || '—';
 }
 
-let touchPicking = false; // タッチでスポイトしている途中（離した所の色を取る）
+// ── タッチのスポイト ──
+// 指・Pencil では、触れた瞬間には取らず、触れている間はガイドの枠と拡大鏡を付いてこさせ、
+// 離した所の色を取る（指やペン先で隠れて狙えないため）。
+// 色選択画面の 💉（サイト内のスポイト）と同じく、ポインタのイベント（pointerdown など）で受け取る。
+// マウスは今まで通り、押した瞬間に取る（mousedown 側）。
+let touchPick = null; // スポイトしている途中のポインタ {id}
 
-function showTouchPick(col, row) {
+function showTouchPick(clientX, clientY) {
+  const { col, row } = getCell({ clientX, clientY });
   showTouchGuide(col, row);
-  const r = cOv.getBoundingClientRect();
-  const s = cellPx() * zoom;
   // 拡大鏡は指で隠れないよう、マウスのときより離して出す
-  showPickLoupe(r.left + (col + 0.5) * s, r.top + (row + 0.5) * s, (dx, dy) => {
-    const rr = row + dy, cc = col + dx;
-    if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) return undefined;
-    return compositeAt(rr, cc);
+  showPickLoupe(clientX, clientY, (dx, dy) => {
+    const r = row + dy, c = col + dx;
+    if (r < 0 || c < 0 || r >= rows || c >= cols) return undefined;
+    return compositeAt(r, c);
   }, LOUPE_GAP_TOUCH);
 }
 
 function endTouchPick() {
-  touchPicking = false;
+  touchPick = null;
   hidePickLoupe();
   redrawOverlay();
   statPos.textContent = '—';
 }
 
-function touchPointerMove(col, row) {
-  if (touchPicking) {
-    showTouchPick(col, row);
+cOv.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse') return;
+  if (touchPick) {
+    // スポイト中にもう1本指が触れたらピンチなので、色を取らずにやめる（Pencil で描くモードの指は無視）
+    if (e.pointerType === 'touch' && fingersDraw()) endTouchPick();
     return;
   }
+  if (!started || currentTool !== 'pick' || selectionMode !== 'none') return;
+  if (e.pointerType === 'touch' && !fingersDraw()) return; // Pencil で描くモードでは、指は移動・拡大縮小に使う
+  touchPick = { id: e.pointerId };
+  try { cOv.setPointerCapture(e.pointerId); } catch (err) { /* 捕捉できなくてもキャンバスの上では動く */ }
+  showTouchPick(e.clientX, e.clientY);
+});
+cOv.addEventListener('pointermove', e => {
+  if (touchPick && e.pointerId === touchPick.id) showTouchPick(e.clientX, e.clientY);
+});
+cOv.addEventListener('pointerup', e => {
+  if (!touchPick || e.pointerId !== touchPick.id) return;
+  const { col, row } = getCell(e);
+  endTouchPick();
+  applyToolSingle(col, row); // 離した所の色を取る（キャンバスの外で離したら取らない）
+});
+cOv.addEventListener('pointercancel', e => {
+  if (touchPick && e.pointerId === touchPick.id) endTouchPick();
+});
+
+function touchPointerMove(col, row) {
+  if (currentTool === 'pick') return;
   if (selectionMode === 'range' && rangeStart) {
     if (rangeSelectMode === 'free') {
       const last = rangePath[rangePath.length - 1];
@@ -1225,11 +1246,6 @@ function touchPointerMove(col, row) {
 }
 
 function touchPointerUp(col, row) {
-  if (touchPicking) {
-    endTouchPick();
-    applyToolSingle(col, row); // 離した所の色を取る（キャンバスの外で離したら取らない）
-    return;
-  }
   if (selectionMode === 'range' && rangeStart) {
     if (rangeSelectMode === 'free') {
       applyFreeRangeSelection(rangePath, col, row);
@@ -1299,7 +1315,7 @@ function cancelSingleTouchGesture() {
     }
   }
   // 図形・範囲選択・タッチのスポイトはまだ確定前なので、途中の状態を捨てるだけでよい
-  if (touchPicking) endTouchPick();
+  if (touchPick) endTouchPick();
   shapeStart = null;
   rangeStart = null;
   rangePath = [];
