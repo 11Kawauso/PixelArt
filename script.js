@@ -2210,6 +2210,7 @@ document.body.appendChild(pagePickBar);
 pagePickBar.querySelector('button').addEventListener('click', () => endPagePick(null));
 let pagePicking = false;
 let pagePickPressed = false;
+let pagePickPointerId = null; // 押している指・Pencil・マウス
 
 function cssColorToHex(css) {
   const m = css.match(/rgba?\(\s*(\d+)[ ,]+(\d+)[ ,]+(\d+)(?:\s*[,/]\s*([\d.]+%?))?/);
@@ -2218,10 +2219,14 @@ function cssColorToHex(css) {
   return '#' + [m[1], m[2], m[3]].map(v => (+v).toString(16).padStart(2, '0')).join('');
 }
 
+// 画面上の点にある部品。スマホでパネルを開いているときの暗い幕は無視して、その下を見る
+function pageElementAt(x, y) {
+  return document.elementsFromPoint(x, y).find(e => !e.closest('.panel-backdrop, .page-pick-bar, .pick-loupe'));
+}
+
 // 画面上の点の色。'#rrggbb'、透明な所ならnull、拾えない所ならundefined。
 function pageColorAt(x, y) {
-  // スマホでパネルを開いているときの暗い幕は無視して、その下を見る
-  const el = document.elementsFromPoint(x, y).find(e => !e.closest('.panel-backdrop, .page-pick-bar, .pick-loupe'));
+  const el = pageElementAt(x, y);
   if (!el) return undefined;
   if (el === cOv) {
     const { col, row } = getCell({ clientX: x, clientY: y });
@@ -2234,15 +2239,37 @@ function pageColorAt(x, y) {
   return undefined;
 }
 
-function showPagePickLoupe(x, y) {
+// キャンバスの上では、スポイトツールと同じくマスのガイドの枠も出す
+function showPagePickLoupe(x, y, pointerType) {
+  const onCanvas = pageElementAt(x, y) === cOv;
+  if (onCanvas) {
+    const { col, row } = getCell({ clientX: x, clientY: y });
+    showTouchGuide(col, row);
+  } else {
+    clearPagePickGuide();
+  }
   // キャンバスの上ではちょうど1マスずつ、それ以外は4pxずつずらした所を並べる
-  const step = document.elementFromPoint(x, y) === cOv ? cellPx() * zoom : 4;
-  showPickLoupe(x, y, (dx, dy) => pageColorAt(x + dx * step, y + dy * step));
+  const step = onCanvas ? cellPx() * zoom : 4;
+  showPickLoupe(x, y, (dx, dy) => pageColorAt(x + dx * step, y + dy * step),
+    pointerType === 'mouse' ? LOUPE_GAP : LOUPE_GAP_TOUCH); // 指のときは隠れないよう離して出す
+}
+
+function clearPagePickGuide() {
+  redrawOverlay();
+  statPos.textContent = '—';
+}
+
+// 押している途中をやめる（色の無い所で離した・ピンチを始めたなど）。次のタップは待つ
+function cancelPagePickPress() {
+  pagePickPressed = false;
+  pagePickPointerId = null;
+  hidePickLoupe();
+  clearPagePickGuide();
 }
 
 function startPagePick() {
   pagePicking = true;
-  pagePickPressed = false;
+  cancelPagePickPress();
   colorPickModal.style.display = 'none';
   pagePickBar.style.display = 'flex';
   document.body.classList.add('page-picking');
@@ -2250,10 +2277,9 @@ function startPagePick() {
 
 function endPagePick(hex) {
   pagePicking = false;
-  pagePickPressed = false;
+  cancelPagePickPress();
   pagePickBar.style.display = 'none';
   document.body.classList.remove('page-picking');
-  hidePickLoupe();
   colorPickModal.style.display = 'flex';
   if (hex) {
     colorWheel.setHex(hex);
@@ -2261,40 +2287,46 @@ function endPagePick(hex) {
   }
 }
 
-// 拾っている間は、ほかの操作（描く・パネルを閉じるなど）に届かないよう、ページ全体で先に受け取って止める
+// 拾っている間は、ほかの操作（描く・パネルを閉じるなど）に届かないよう、ページ全体で先に受け取って止める。
+// ただし2本指の操作（キャンバスの拡大縮小・移動）は、スポイトツールのときと同じく通す。
 const isPagePickBarEvent = e => pagePickBar.contains(e.target);
 function blockForPagePick(e) {
   if (!pagePicking || isPagePickBarEvent(e)) return;
+  if (e.type.startsWith('touch') && (isPinching || e.touches.length >= 2)) {
+    if (pagePickPressed) cancelPagePickPress(); // 1本目で押していた分は取らずにやめる
+    return;
+  }
   e.preventDefault();
   e.stopPropagation();
 }
-['touchstart', 'touchmove', 'touchend', 'mousedown', 'mouseup', 'click', 'dblclick', 'contextmenu'].forEach(type => {
+['touchstart', 'touchmove', 'touchend', 'touchcancel', 'mousedown', 'mouseup', 'mousemove', 'click', 'dblclick', 'contextmenu'].forEach(type => {
   window.addEventListener(type, blockForPagePick, { capture: true, passive: false });
 });
 window.addEventListener('pointerdown', e => {
   if (!pagePicking || isPagePickBarEvent(e)) return;
   blockForPagePick(e);
+  if (pagePickPressed) { cancelPagePickPress(); return; } // 2本目の指が触れたらピンチ
   pagePickPressed = true;
-  showPagePickLoupe(e.clientX, e.clientY);
+  pagePickPointerId = e.pointerId;
+  showPagePickLoupe(e.clientX, e.clientY, e.pointerType);
 }, { capture: true });
 window.addEventListener('pointermove', e => {
   if (!pagePicking) return;
   blockForPagePick(e);
-  if (pagePickPressed || e.pointerType === 'mouse') showPagePickLoupe(e.clientX, e.clientY);
+  const pressing = pagePickPressed && e.pointerId === pagePickPointerId;
+  if (pressing || (!pagePickPressed && e.pointerType === 'mouse')) showPagePickLoupe(e.clientX, e.clientY, e.pointerType);
 }, { capture: true });
 window.addEventListener('pointerup', e => {
-  if (!pagePicking || !pagePickPressed) return;
+  if (!pagePicking || !pagePickPressed || e.pointerId !== pagePickPointerId) return;
   blockForPagePick(e);
-  pagePickPressed = false;
   const hex = pageColorAt(e.clientX, e.clientY);
+  cancelPagePickPress();
   // この後に続くマウスのclickまで止めてから戻す（先に戻すと、clickが下のパレットなどに届いてしまう）
   if (hex) setTimeout(() => endPagePick(hex), 0);
-  else hidePickLoupe(); // 色の無い所で離したら、そのまま次のタップを待つ
+  // 色の無い所で離したら、そのまま次のタップを待つ
 }, { capture: true });
-window.addEventListener('pointercancel', () => {
-  if (!pagePicking) return;
-  pagePickPressed = false;
-  hidePickLoupe();
+window.addEventListener('pointercancel', e => {
+  if (pagePicking && e.pointerId === pagePickPointerId) cancelPagePickPress();
 }, { capture: true });
 window.addEventListener('keydown', e => {
   if (pagePicking && e.key === 'Escape') { e.stopPropagation(); endPagePick(null); }
