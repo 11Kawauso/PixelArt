@@ -962,6 +962,14 @@ cOv.addEventListener('mouseleave',() => {
   lastCell = null;
   hidePickLoupe();
 });
+// iPad で Pencil を浮かせて動かしたときもガイドの枠が出るが、Pencil を画面から遠ざけたときは
+// マウスの「外に出た」が来ないことがあるため、Pencil 自体の「外に出た」でも消す
+cOv.addEventListener('pointerleave', e => {
+  if (e.pointerType === 'mouse' || isPainting || touchPicking) return;
+  redrawOverlay();
+  statPos.textContent = '—';
+  hidePickLoupe();
+});
 
 // ── スポイトの拡大鏡 ──
 // スポイト中は、カーソルの横にカーソルのまわりを拡大した円を出す。
@@ -969,6 +977,7 @@ cOv.addEventListener('mouseleave',() => {
 const LOUPE_CELLS = 9;     // 縦横に見せるマスの数（真ん中があるよう奇数）
 const LOUPE_CELL_PX = 12;  // 拡大鏡の中の1マスの大きさ
 const LOUPE_GAP = 22;      // カーソルから離す距離
+const LOUPE_GAP_TOUCH = 48; // タッチのときは指で隠れないよう、もっと離す
 const LOUPE_D = LOUPE_CELLS * LOUPE_CELL_PX;
 const LOUPE_W = LOUPE_D + 8, LOUPE_H = LOUPE_D + 8 + 30; // 円の下に色コードの札を付ける
 const pickLoupe = document.createElement('canvas');
@@ -977,7 +986,7 @@ document.body.appendChild(pickLoupe);
 let loupeDpr = 0;
 
 // colorAt(dx, dy)：真ん中から dx, dy ずれた所の色。'#rrggbb'、透明ならnull、範囲外ならundefined。
-function showPickLoupe(clientX, clientY, colorAt) {
+function showPickLoupe(clientX, clientY, colorAt, gap = LOUPE_GAP) {
   const dpr = window.devicePixelRatio || 1;
   if (dpr !== loupeDpr) {
     loupeDpr = dpr;
@@ -1051,9 +1060,9 @@ function showPickLoupe(clientX, clientY, colorAt) {
   ctx.fillText(center || '—', tx + 24, ty + th / 2 + 1);
 
   // 基本はカーソルの右上。画面からはみ出すときは反対側に回す
-  let left = clientX + LOUPE_GAP, top = clientY - LOUPE_GAP - LOUPE_H;
-  if (left + LOUPE_W > window.innerWidth) left = clientX - LOUPE_GAP - LOUPE_W;
-  if (top < 0) top = clientY + LOUPE_GAP;
+  let left = clientX + gap, top = clientY - gap - LOUPE_H;
+  if (left + LOUPE_W > window.innerWidth) left = clientX - gap - LOUPE_W;
+  if (top < 0) top = clientY + gap;
   pickLoupe.style.transform = `translate(${left}px, ${top}px)`;
   pickLoupe.style.display = 'block';
 }
@@ -1129,8 +1138,15 @@ function touchPointerDown(col, row) {
     shapeStart = {col, row};
     return;
   }
+  if (currentTool === 'pick') {
+    // スポイトは触れた瞬間には取らず、触れている間はガイドの枠と拡大鏡を付いてこさせ、
+    // 離した所の色を取る（指やペン先で隠れて狙えないため）
+    touchPicking = true;
+    showTouchPick(col, row);
+    return;
+  }
   showTouchGuide(col, row);
-  if (activeLayerLocked() && currentTool !== 'pick') return;
+  if (activeLayerLocked()) return;
   pushHistory();
   isPainting = true;
   lastCell = {col, row};
@@ -1146,7 +1162,32 @@ function showTouchGuide(col, row) {
   statColor.textContent = compositeAt(row, col) || '—';
 }
 
+let touchPicking = false; // タッチでスポイトしている途中（離した所の色を取る）
+
+function showTouchPick(col, row) {
+  showTouchGuide(col, row);
+  const r = cOv.getBoundingClientRect();
+  const s = cellPx() * zoom;
+  // 拡大鏡は指で隠れないよう、マウスのときより離して出す
+  showPickLoupe(r.left + (col + 0.5) * s, r.top + (row + 0.5) * s, (dx, dy) => {
+    const rr = row + dy, cc = col + dx;
+    if (rr < 0 || cc < 0 || rr >= rows || cc >= cols) return undefined;
+    return compositeAt(rr, cc);
+  }, LOUPE_GAP_TOUCH);
+}
+
+function endTouchPick() {
+  touchPicking = false;
+  hidePickLoupe();
+  redrawOverlay();
+  statPos.textContent = '—';
+}
+
 function touchPointerMove(col, row) {
+  if (touchPicking) {
+    showTouchPick(col, row);
+    return;
+  }
   if (selectionMode === 'range' && rangeStart) {
     if (rangeSelectMode === 'free') {
       const last = rangePath[rangePath.length - 1];
@@ -1184,6 +1225,11 @@ function touchPointerMove(col, row) {
 }
 
 function touchPointerUp(col, row) {
+  if (touchPicking) {
+    endTouchPick();
+    applyToolSingle(col, row); // 離した所の色を取る（キャンバスの外で離したら取らない）
+    return;
+  }
   if (selectionMode === 'range' && rangeStart) {
     if (rangeSelectMode === 'free') {
       applyFreeRangeSelection(rangePath, col, row);
@@ -1252,7 +1298,8 @@ function cancelSingleTouchGesture() {
       endMoveDrag();
     }
   }
-  // 図形・範囲選択はまだ確定前なので、始点を捨てるだけでよい
+  // 図形・範囲選択・タッチのスポイトはまだ確定前なので、途中の状態を捨てるだけでよい
+  if (touchPicking) endTouchPick();
   shapeStart = null;
   rangeStart = null;
   rangePath = [];
